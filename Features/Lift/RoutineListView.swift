@@ -129,39 +129,62 @@ struct RoutineListContent: View {
 }
 
 // MARK: - Subview: Exercise List (Read-Only Manager)
+// MARK: - Subview: Exercise List (Grouped Manager)
 struct ExerciseLibraryContent: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Exercise.name) var exercises: [Exercise]
+    
+    @State private var searchText = ""
+    
+    // Grouping Logic
+    var groupedExercises: [String: [Exercise]] {
+        let filtered = exercises.filter {
+            searchText.isEmpty || $0.name.localizedCaseInsensitiveContains(searchText)
+        }
+        return Dictionary(grouping: filtered, by: { $0.muscleGroup })
+    }
+    
+    var muscleGroups: [String] {
+        groupedExercises.keys.sorted()
+    }
     
     var body: some View {
         List {
             if exercises.isEmpty {
                 ContentUnavailableView("No Exercises", systemImage: "dumbbell")
             } else {
-                ForEach(exercises) { exercise in
-                    // Make the row clickable!
-                    NavigationLink(destination: ExerciseDetailView(exercise: exercise)) {
-                        VStack(alignment: .leading) {
-                            Text(exercise.name)
-                                .font(.headline)
-                            HStack {
-                                Text(exercise.muscleGroup)
-                                Text("•")
-                                Text(exercise.type)
+                ForEach(muscleGroups, id: \.self) { group in
+                    Section(header: Text(group)) {
+                        ForEach(groupedExercises[group] ?? []) { exercise in
+                            // Navigation to Detail/Stats View
+                            NavigationLink(destination: ExerciseDetailView(exercise: exercise)) {
+                                HStack {
+                                    VStack(alignment: .leading) {
+                                        Text(exercise.name)
+                                            .font(.headline)
+                                        Text(exercise.type) // Subtitle
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
                             }
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        }
+                        .onDelete { indexSet in
+                            deleteExercise(at: indexSet, in: group)
                         }
                     }
                 }
-                .onDelete(perform: deleteExercise)
             }
         }
+        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always))
     }
     
-    private func deleteExercise(offsets: IndexSet) {
+    // Helper to delete from the correct group
+    private func deleteExercise(at offsets: IndexSet, in group: String) {
+        let exercisesInGroup = groupedExercises[group] ?? []
         for index in offsets {
-            modelContext.delete(exercises[index])
+            let exerciseToDelete = exercisesInGroup[index]
+            modelContext.delete(exerciseToDelete)
         }
     }
 }

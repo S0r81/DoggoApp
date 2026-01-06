@@ -16,8 +16,8 @@ struct ExerciseCreationView: View {
     @State private var selectedMuscle: String = "Chest"
     @State private var selectedType: String = "Strength"
     
-    // Hardcoded list for now (you can expand this later)
-    let muscleGroups = ["Chest", "Back", "Legs", "Shoulders", "Arms", "Core", "Cardio"]
+    // Expanded list for better categorization
+    let muscleGroups = ["Chest", "Back", "Legs", "Shoulders", "Arms", "Core", "Cardio", "Full Body"]
     let types = ["Strength", "Cardio", "Olympic", "Accessory"]
     
     var body: some View {
@@ -51,16 +51,19 @@ struct ExerciseCreationView: View {
                 
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
+                        // NEW: Haptic Feedback
+                        HapticManager.shared.notification(type: .success)
                         saveExercise()
                     }
-                    .disabled(name.isEmpty) // Disable if no name typed
+                    .disabled(name.isEmpty)
                 }
             }
         }
     }
     
     private func saveExercise() {
-        let newExercise = Exercise(name: name, muscleGroup: selectedMuscle, type: selectedType)
+        // Matches the updated Model below
+        let newExercise = Exercise(name: name, type: selectedType, muscleGroup: selectedMuscle)
         modelContext.insert(newExercise)
         dismiss()
     }

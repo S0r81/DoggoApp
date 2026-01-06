@@ -31,11 +31,6 @@ struct ContentView: View {
                 .applyTheme(userTheme) // <--- And here
                 .tabItem { Label("Workout", systemImage: "waveform.path.ecg") }
                 .tag(2)
-            
-            HistoryView()
-                .applyTheme(userTheme) // <--- And here
-                .tabItem { Label("History", systemImage: "clock.arrow.circlepath") }
-                .tag(3)
         }
     }
 }

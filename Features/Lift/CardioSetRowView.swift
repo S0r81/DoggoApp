@@ -20,7 +20,7 @@ struct CardioSetRowView: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 20)
             
-            // 2. Distance Input (Miles)
+            // 2. Distance Input
             VStack(spacing: 2) {
                 Text("Distance")
                     .font(.caption2)
@@ -34,13 +34,26 @@ struct CardioSetRowView: View {
                     .background(Color.blue.opacity(0.1))
                     .cornerRadius(8)
                     .overlay(
-                        Text("mi").font(.caption2).foregroundStyle(.secondary).padding(.trailing, 4),
+                        // CHANGE: Menu to toggle units (mi/km)
+                        Menu {
+                            Button("mi") { set.unit = "mi" }
+                            Button("km") { set.unit = "km" }
+                        } label: {
+                            Text(set.unit)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 4)
+                                .background(Color.white.opacity(0.5)) // Subtle background for tap target
+                                .cornerRadius(4)
+                        }
+                        .padding(.trailing, 8),
                         alignment: .trailing
                     )
             }
             .frame(maxWidth: .infinity)
             
-            // 3. Duration Input (Minutes)
+            // 3. Duration Input (Time is always "min", so no change needed)
             VStack(spacing: 2) {
                 Text("Time")
                     .font(.caption2)
@@ -54,7 +67,10 @@ struct CardioSetRowView: View {
                     .background(Color.orange.opacity(0.1))
                     .cornerRadius(8)
                     .overlay(
-                        Text("min").font(.caption2).foregroundStyle(.secondary).padding(.trailing, 4),
+                        Text("min")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .padding(.trailing, 8),
                         alignment: .trailing
                     )
             }
@@ -62,6 +78,7 @@ struct CardioSetRowView: View {
             
             // 4. Completion Checkbox
             Button(action: {
+                HapticManager.shared.impact(style: .medium)
                 withAnimation(.snappy) {
                     set.isCompleted.toggle()
                 }

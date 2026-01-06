@@ -10,9 +10,11 @@ import SwiftData
 import Charts
 
 struct ExerciseDetailView: View {
+    // We use the setting here to decide what to CONVERT TO
+    @AppStorage("unitSystem") private var preferredSystem: UnitSystem = .imperial
+    
     let exercise: Exercise
     
-    // Sort sets by date
     var history: [WorkoutSet] {
         return exercise.sets.sorted { ($0.workoutSession?.date ?? Date()) < ($1.workoutSession?.date ?? Date()) }
     }
@@ -21,15 +23,42 @@ struct ExerciseDetailView: View {
         exercise.type == "Cardio"
     }
     
+    // MARK: - Normalization Logic
+    
+    func normalizedWeight(_ set: WorkoutSet) -> Double {
+        if preferredSystem == .imperial {
+            // Want LBS. If set is KG, convert.
+            return set.unit == "kg" ? set.weight * 2.20462 : set.weight
+        } else {
+            // Want KG. If set is LBS, convert.
+            return set.unit == "lbs" ? set.weight * 0.453592 : set.weight
+        }
+    }
+    
+    func normalizedDistance(_ set: WorkoutSet) -> Double {
+        let dist = set.distance ?? 0
+        if preferredSystem == .imperial {
+            // Want Miles. If set is KM, convert.
+            return set.unit == "km" ? dist * 0.621371 : dist
+        } else {
+            // Want KM. If set is Miles, convert.
+            return set.unit == "mi" ? dist * 1.60934 : dist
+        }
+    }
+    
     // MARK: - Stats Calculations
     
     var personalRecordValue: String {
         if isCardio {
-            let maxDist = history.compactMap { $0.distance }.max() ?? 0
-            return "\(maxDist.formatted()) mi"
+            let maxDist = history.map { normalizedDistance($0) }.max() ?? 0
+            if maxDist < 0.1 {
+                let maxTime = history.compactMap { $0.duration }.max() ?? 0
+                return "\(maxTime.formatted()) min"
+            }
+            return "\(String(format: "%.2f", maxDist)) \(preferredSystem.distanceLabel)"
         } else {
-            let maxWeight = history.map { $0.weight }.max() ?? 0
-            return "\(Int(maxWeight)) lbs"
+            let maxWeight = history.map { normalizedWeight($0) }.max() ?? 0
+            return "\(Int(maxWeight)) \(preferredSystem.weightLabel)"
         }
     }
     
@@ -65,34 +94,21 @@ struct ExerciseDetailView: View {
                         Chart {
                             ForEach(history) { set in
                                 if let date = set.workoutSession?.date {
-                                    // CONDITIONAL PLOTTING
                                     if isCardio {
-                                        // Plot Distance
+                                        // Plot Normalized Distance
                                         LineMark(
                                             x: .value("Date", date),
-                                            y: .value("Distance", set.distance ?? 0)
+                                            y: .value("Distance", normalizedDistance(set))
                                         )
                                         .interpolationMethod(.catmullRom)
-                                        .foregroundStyle(Color.accentColor)
-                                        
-                                        PointMark(
-                                            x: .value("Date", date),
-                                            y: .value("Distance", set.distance ?? 0)
-                                        )
                                         .foregroundStyle(Color.accentColor)
                                     } else {
-                                        // Plot Weight
+                                        // Plot Normalized Weight
                                         LineMark(
                                             x: .value("Date", date),
-                                            y: .value("Weight", set.weight)
+                                            y: .value("Weight", normalizedWeight(set))
                                         )
                                         .interpolationMethod(.catmullRom)
-                                        .foregroundStyle(Color.accentColor)
-                                        
-                                        PointMark(
-                                            x: .value("Date", date),
-                                            y: .value("Weight", set.weight)
-                                        )
                                         .foregroundStyle(Color.accentColor)
                                     }
                                 }
@@ -126,18 +142,18 @@ struct ExerciseDetailView: View {
                             
                             // THE ROW CONTENT
                             if isCardio {
-                                // Cardio: 2.5 mi in 20 min
                                 VStack(alignment: .trailing) {
-                                    Text("\(set.distance?.formatted() ?? "0") mi")
+                                    // Show ORIGINAL stored unit
+                                    Text("\(set.distance?.formatted() ?? "0") \(set.unit)")
                                         .bold()
                                     Text(formatDuration(minutes: set.duration ?? 0))
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
                             } else {
-                                // Strength: 225 lbs x 5
                                 HStack {
-                                    Text("\(Int(set.weight)) lbs")
+                                    // Show ORIGINAL stored unit
+                                    Text("\(Int(set.weight)) \(set.unit)")
                                         .bold()
                                     Text("x")
                                     Text("\(set.reps)")
@@ -156,7 +172,6 @@ struct ExerciseDetailView: View {
         .navigationTitle(exercise.name)
     }
     
-    // Helper to format minutes nicely (e.g. 90 min -> 1h 30m)
     func formatDuration(minutes: Double) -> String {
         let totalSeconds = Int(minutes * 60)
         let h = totalSeconds / 3600
@@ -170,7 +185,6 @@ struct ExerciseDetailView: View {
     }
 }
 
-// Re-using the StatBox from before
 struct StatBox: View {
     let title: String
     let value: String

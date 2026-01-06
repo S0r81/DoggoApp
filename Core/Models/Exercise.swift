@@ -5,23 +5,24 @@
 //  Created by Sorest on 1/5/26.
 //
 
-import Foundation
 import SwiftData
+import Foundation
 
 @Model
 class Exercise {
     var id: UUID
     var name: String
-    var muscleGroup: String // e.g., "Chest", "Legs"
-    var type: String // "Strength", "Cardio"
+    var type: String // "Strength" or "Cardio"
+    var muscleGroup: String // <--- NEW PROPERTY
     
-    // Relationship: One exercise is used in many sets
-    @Relationship(deleteRule: .cascade) var sets: [WorkoutSet] = []
+    @Relationship(deleteRule: .cascade)
+    var sets: [WorkoutSet] = []
     
-    init(name: String, muscleGroup: String, type: String = "Strength") {
+    // Updated Initializer
+    init(name: String, type: String = "Strength", muscleGroup: String = "Other") {
         self.id = UUID()
         self.name = name
-        self.muscleGroup = muscleGroup
         self.type = type
+        self.muscleGroup = muscleGroup
     }
 }

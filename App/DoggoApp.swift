@@ -38,6 +38,12 @@ struct DoggoApp: App {
                 // 3. APPLY THEME: Inject the colors here
                 .preferredColorScheme(userTheme == .light ? .light : .dark)
                 .tint(Color.accent(for: userTheme))
+                // 4. NEW: SEED DATA
+                // This runs once on app launch. If the DB is empty, it loads the defaults.
+                .onAppear {
+                    let context = sharedModelContainer.mainContext
+                    DataSeeder.seedExercises(context: context)
+                }
         }
         .modelContainer(sharedModelContainer)
     }

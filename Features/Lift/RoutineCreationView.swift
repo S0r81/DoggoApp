@@ -151,8 +151,6 @@ struct RoutineCreationView: View {
         dismiss()
     }
 }
-
-// MARK: - Subview: Set Configuration Sheet
 // MARK: - Subview: Set Configuration Sheet
 struct SetConfigurationView: View {
     @Environment(\.dismiss) var dismiss
@@ -236,18 +234,42 @@ struct ExerciseSelectionSheet: View {
     @Query(sort: \Exercise.name) var allExercises: [Exercise]
     var onSelect: (Exercise) -> Void
     
+    @State private var searchText = ""
+    
+    var groupedExercises: [String: [Exercise]] {
+        let filtered = allExercises.filter {
+            searchText.isEmpty || $0.name.localizedCaseInsensitiveContains(searchText)
+        }
+        return Dictionary(grouping: filtered, by: { $0.muscleGroup })
+    }
+    
+    var muscleGroups: [String] { groupedExercises.keys.sorted() }
+    
     var body: some View {
         NavigationStack {
-            List(allExercises) { exercise in
-                Button(action: {
-                    onSelect(exercise)
-                    dismiss()
-                }) {
-                    Text(exercise.name)
-                        .foregroundStyle(.primary)
+            List {
+                ForEach(muscleGroups, id: \.self) { group in
+                    Section(header: Text(group)) {
+                        ForEach(groupedExercises[group] ?? []) { exercise in
+                            Button(action: {
+                                onSelect(exercise)
+                                dismiss()
+                            }) {
+                                HStack {
+                                    Text(exercise.name).foregroundStyle(.primary)
+                                    Spacer()
+                                    if exercise.type == "Cardio" {
+                                        Image(systemName: "figure.run").foregroundStyle(.blue)
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
+            .searchable(text: $searchText)
             .navigationTitle("Select Exercise")
+            .toolbar { Button("Cancel") { dismiss() } }
         }
     }
 }

@@ -5,7 +5,6 @@ struct ActiveWorkoutView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var viewModel = ActiveWorkoutViewModel()
     
-    // We need to fetch exercises to handle the "Start Dummy Workout" logic if needed
     @Query private var exercises: [Exercise]
     
     @State private var showExerciseList = false
@@ -25,6 +24,7 @@ struct ActiveWorkoutView: View {
                     Spacer()
                     
                     Button("Finish") {
+                        HapticManager.shared.notification(type: .success)
                         viewModel.finishWorkout()
                     }
                     .buttonStyle(.borderedProminent)
@@ -37,46 +37,38 @@ struct ActiveWorkoutView: View {
                 // The List of Sets
                 if let session = viewModel.currentSession {
                     List {
-                        // 1. Get unique exercises from this session
-                        // We filter the sets to find which exercises are being used
                         let activeExercises = getExercises(from: session)
                         
                         ForEach(activeExercises) { exercise in
-                            // 2. Create a dynamic section for each exercise
                             Section(header: Text(exercise.name).font(.title3).bold()) {
                                 
-                                // 3. Filter sets belonging ONLY to this exercise
                                 let relevantSets = session.sets
                                     .filter { $0.exercise == exercise }
                                     .sorted { $0.orderIndex < $1.orderIndex }
                                 
-                                // Inside ActiveWorkoutView.swift (inside the List)
-
                                 ForEach(relevantSets) { set in
                                     let index = (relevantSets.firstIndex(of: set) ?? 0) + 1
                                     
-                                    // THE SWITCH LOGIC
                                     if exercise.type == "Cardio" {
                                         CardioSetRowView(set: set, index: index)
                                     } else {
                                         SetRowView(set: set, index: index)
                                     }
                                 }
-                                .onDelete { indexSet in   // <--- ADD THIS BLOCK
+                                .onDelete { indexSet in
                                     for index in indexSet {
                                         let setToDelete = relevantSets[index]
                                         viewModel.deleteSet(setToDelete)
                                     }
                                 }
                                 
-                                // "Add Set" button specifically for this exercise
                                 Button("Add Set") {
+                                    HapticManager.shared.impact(style: .light)
                                     viewModel.addSet(to: exercise, weight: 0, reps: 0)
                                 }
                             }
                         }
                         
-                        // "Add New Exercise" Button
                         Button(action: {
                             showExerciseList = true
                         }) {
@@ -93,7 +85,6 @@ struct ActiveWorkoutView: View {
                         }
                     }
                 } else {
-                    // Start Button (If no workout is active)
                     ContentUnavailableView("No Active Workout", systemImage: "dumbbell.fill")
                     
                     Button("Start Workout") {
@@ -105,9 +96,26 @@ struct ActiveWorkoutView: View {
             }
             .navigationTitle("Log Workout")
             .onAppear {
-                // When this tab opens, check if there is a session running
                 if viewModel.currentSession == nil {
                     viewModel.checkForActiveSession(context: modelContext)
+                }
+            }
+            // MARK: - TOOLBAR UPDATES
+            .toolbar {
+                // 1. The History Link (Top Right)
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink(destination: HistoryView()) {
+                        Text("History")
+                            .bold()
+                    }
+                }
+                
+                // 2. The Keyboard Done Button
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") {
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    }
                 }
             }
         }
@@ -115,14 +123,15 @@ struct ActiveWorkoutView: View {
     
     // MARK: - Helpers
     
-    // Helper to extract unique exercises from the session
     private func getExercises(from session: WorkoutSession) -> [Exercise] {
-        let allExercises = session.sets.compactMap { $0.exercise }
-        // Remove duplicates while keeping order
+        let sortedSets = session.sets.sorted { $0.orderIndex < $1.orderIndex }
+        
         var unique: [Exercise] = []
-        for exercise in allExercises {
-            if !unique.contains(where: { $0.id == exercise.id }) {
-                unique.append(exercise)
+        for set in sortedSets {
+            if let exercise = set.exercise {
+                if !unique.contains(where: { $0.id == exercise.id }) {
+                    unique.append(exercise)
+                }
             }
         }
         return unique
@@ -130,8 +139,6 @@ struct ActiveWorkoutView: View {
     
     private func startDummyWorkout() {
         viewModel.startNewWorkout(context: modelContext)
-        // Note: We don't automatically add a set anymore,
-        // we let the user click "Add Exercise"
     }
     
     private func formatTime(_ totalSeconds: Int) -> String {

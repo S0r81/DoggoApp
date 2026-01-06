@@ -1,31 +1,34 @@
-import Foundation
 import SwiftData
+import Foundation
 
 @Model
 class WorkoutSet {
     var id: UUID
+    var weight: Double
+    var reps: Int
     var orderIndex: Int
     var isCompleted: Bool
     
-    // STRENGTH FIELDS
-    var weight: Double
-    var reps: Int
+    // NEW: Store the unit for this specific set
+    // Defaults to "lbs" for migration safety
+    var unit: String = "lbs"
     
-    // CARDIO FIELDS (New!)
-    var distance: Double? // e.g., Miles
-    var duration: Double? // e.g., Minutes
+    // Cardio specific
+    var distance: Double?
+    var duration: Double?
     
-    // The Parents
+    @Relationship(inverse: \WorkoutSession.sets)
     var workoutSession: WorkoutSession?
+    
+    @Relationship(inverse: \Exercise.sets)
     var exercise: Exercise?
     
-    init(weight: Double = 0, reps: Int = 0, distance: Double? = nil, duration: Double? = nil, orderIndex: Int) {
+    init(weight: Double, reps: Int, orderIndex: Int, unit: String = "lbs") {
         self.id = UUID()
         self.weight = weight
         self.reps = reps
-        self.distance = distance
-        self.duration = duration
         self.orderIndex = orderIndex
         self.isCompleted = false
+        self.unit = unit
     }
 }

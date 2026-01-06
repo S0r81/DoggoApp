@@ -8,10 +8,17 @@ struct SetRowView: View {
     @State private var showWeightPicker = false
     @State private var showRepsPicker = false
     
-    // Data sources for the wheels
-    // Weight: 0 to 600 in 5lb steps
-    let weightOptions: [Double] = Array(stride(from: 0, through: 600, by: 5.0))
-    // Reps: 0 to 100
+    // CHANGE 1: Dynamic Range based on the set's CURRENT unit
+    var weightOptions: [Double] {
+        if set.unit == "kg" {
+            // Metric: 0-300 in 1kg increments
+            return Array(stride(from: 0, through: 300, by: 1.0))
+        } else {
+            // Imperial: 0-600 in 2.5lb increments
+            return Array(stride(from: 0, through: 600, by: 2.5))
+        }
+    }
+    
     let repsOptions: [Int] = Array(0...100)
     
     var body: some View {
@@ -23,44 +30,58 @@ struct SetRowView: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 20)
             
-            // 2. Weight Input (Triggers Weight Sheet)
-            Button(action: {
-                showWeightPicker = true
-            }) {
-                VStack(spacing: 2) {
+            // 2. Weight + Unit Input
+            // We wrap them in an HStack so they look like one box, but have separate interactions
+            HStack(spacing: 0) {
+                
+                // A. The Number (Triggers Picker)
+                Button(action: {
+                    showWeightPicker = true
+                }) {
                     Text("\(set.weight, format: .number)")
                         .font(.title3)
                         .fontWeight(.bold)
                         .foregroundStyle(.blue)
-                    
-                    Text("lbs")
+                        .frame(maxWidth: .infinity) // Take up remaining space
+                }
+                .sheet(isPresented: $showWeightPicker) {
+                    VStack {
+                        Text("Select Weight (\(set.unit))")
+                            .font(.headline)
+                            .padding(.top)
+                        
+                        Picker("Weight", selection: $set.weight) {
+                            ForEach(weightOptions, id: \.self) { weight in
+                                // Show the unit in the picker too
+                                Text("\(weight, format: .number)").tag(weight)
+                            }
+                        }
+                        .pickerStyle(.wheel)
+                        .labelsHidden()
+                    }
+                    .presentationDetents([.fraction(0.3)])
+                    .presentationDragIndicator(.visible)
+                }
+                
+                // B. The Unit (Triggers Menu to swap lbs/kg)
+                Menu {
+                    Button("lbs") { set.unit = "lbs" }
+                    Button("kg") { set.unit = "kg" }
+                } label: {
+                    Text(set.unit)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8) // Touch target size
+                        .background(Color.secondary.opacity(0.1)) // Subtle background for the menu button
+                        .cornerRadius(4)
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
-                .background(Color.blue.opacity(0.1))
-                .cornerRadius(8)
+                .padding(.trailing, 8)
             }
-            .buttonStyle(.plain)
-            .sheet(isPresented: $showWeightPicker) {
-                VStack {
-                    Text("Select Weight")
-                        .font(.headline)
-                        .padding(.top)
-                    
-                    Picker("Weight", selection: $set.weight) {
-                        ForEach(weightOptions, id: \.self) { weight in
-                            Text("\(weight, format: .number) lbs")
-                                .tag(weight)
-                        }
-                    }
-                    .pickerStyle(.wheel)
-                    .labelsHidden()
-                }
-                .presentationDetents([.fraction(0.3)])
-                .presentationDragIndicator(.visible)
-            }
+            .padding(.vertical, 8)
+            .background(Color.blue.opacity(0.1))
+            .cornerRadius(8)
+            .frame(maxWidth: .infinity) // Ensure the whole container stretches
             
             // 3. Reps Input (Triggers Reps Sheet)
             Button(action: {
@@ -76,7 +97,7 @@ struct SetRowView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
-                .frame(width: 70) // Fixed width for reps looks cleaner
+                .frame(width: 70)
                 .padding(.vertical, 8)
                 .background(Color.blue.opacity(0.1))
                 .cornerRadius(8)
@@ -103,6 +124,7 @@ struct SetRowView: View {
             
             // 4. Completion Checkbox
             Button(action: {
+                HapticManager.shared.impact(style: .medium)
                 withAnimation(.snappy) {
                     set.isCompleted.toggle()
                 }

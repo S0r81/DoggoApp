@@ -12,58 +12,68 @@ struct ExerciseListView: View {
     @Environment(\.dismiss) var dismiss
     @Environment(\.modelContext) var modelContext
     
-    // The specific workout session we want to add exercises to
-    var currentSession: WorkoutSession
-    var onAddExercise: (Exercise) -> Void
-    
     @Query(sort: \Exercise.name) var exercises: [Exercise]
-    @State private var searchText = ""
-    @State private var showCreationSheet = false
+    var currentSession: WorkoutSession
+    var onAdd: (Exercise) -> Void
     
-    var filteredExercises: [Exercise] {
-        if searchText.isEmpty {
-            return exercises
-        } else {
-            return exercises.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
+    // 1. Add State for the sheet
+    @State private var showCreateSheet = false
+    @State private var searchText = ""
+    
+    var groupedExercises: [String: [Exercise]] {
+        let filtered = exercises.filter {
+            searchText.isEmpty || $0.name.localizedCaseInsensitiveContains(searchText)
         }
+        return Dictionary(grouping: filtered, by: { $0.muscleGroup })
     }
+    
+    var muscleGroups: [String] { groupedExercises.keys.sorted() }
     
     var body: some View {
         NavigationStack {
             List {
-                ForEach(filteredExercises) { exercise in
-                    Button(action: {
-                        onAddExercise(exercise)
-                        dismiss() // Close the list after selecting
-                    }) {
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text(exercise.name)
-                                    .font(.headline)
-                                Text(exercise.muscleGroup)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                ForEach(muscleGroups, id: \.self) { group in
+                    Section(header: Text(group)) {
+                        ForEach(groupedExercises[group] ?? []) { exercise in
+                            Button(action: {
+                                onAdd(exercise)
+                                dismiss()
+                            }) {
+                                HStack {
+                                    Text(exercise.name).foregroundStyle(.primary)
+                                    Spacer()
+                                    Text(exercise.type)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .padding(4)
+                                        .background(Color(uiColor: .secondarySystemBackground))
+                                        .cornerRadius(4)
+                                }
                             }
-                            Spacer()
-                            Image(systemName: "plus.circle")
-                                .foregroundStyle(.blue)
                         }
                     }
-                    .foregroundStyle(.primary)
                 }
             }
-            .searchable(text: $searchText, prompt: "Search exercises")
+            .searchable(text: $searchText)
             .navigationTitle("Add Exercise")
+            // 2. Update Toolbar to have Cancel AND Plus button
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { dismiss() }
+                }
+                
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(action: { showCreationSheet = true }) {
+                    Button(action: { showCreateSheet = true }) {
                         Image(systemName: "plus")
                     }
                 }
             }
-            .sheet(isPresented: $showCreationSheet) {
-                ExerciseCreationView()
-                    .presentationDetents([.medium]) // Makes it a nice half-sheet
+            // 3. Present the Creation Sheet
+            .sheet(isPresented: $showCreateSheet) {
+                NavigationStack {
+                    ExerciseCreationView()
+                }
+                .presentationDetents([.medium])
             }
         }
     }

@@ -1,10 +1,3 @@
-//
-//  ActiveWorkoutViewModel.swift
-//  Doggo
-//
-//  Created by Sorest on 1/5/26.
-//
-
 import Foundation
 import SwiftData
 import SwiftUI
@@ -18,86 +11,103 @@ class ActiveWorkoutViewModel {
     private var timer: Timer?
     var modelContext: ModelContext?
     
-    init() {
-        // We will load the active session in 'onAppear' via the View
-        // because we need the ModelContext which isn't available in init()
-    }
+    init() { }
     
-    // MARK: - Intelligent Start
+    // MARK: - Start & Resume
     
-    // 1. Check if we already have an unfinished workout
     func checkForActiveSession(context: ModelContext) {
         self.modelContext = context
-        
-        // Fetch the most recent incomplete session
-        // (This is a manual fetch because @Query doesn't work inside classes easily)
         let descriptor = FetchDescriptor<WorkoutSession>(
             predicate: #Predicate { $0.isCompleted == false },
             sortBy: [SortDescriptor(\.date, order: .reverse)]
         )
-        
         if let existingSession = try? context.fetch(descriptor).first {
-            print("Found existing active session!")
             resumeSession(existingSession)
         }
     }
     
-    // 2. Start from a Routine Template
+    func startNewWorkout(context: ModelContext) {
+        self.modelContext = context
+        let newSession = WorkoutSession(name: "Freestyle Workout")
+        newSession.startTime = Date()
+        context.insert(newSession)
+        self.currentSession = newSession
+        self.startTimer()
+    }
+    
     func startWorkout(from routine: Routine, context: ModelContext) {
         self.modelContext = context
-        
         let newSession = WorkoutSession(name: routine.name)
+        newSession.startTime = Date()
         context.insert(newSession)
         
-        // 1. Get ordered items (Exercises)
         let sortedItems = routine.items.sorted { $0.orderIndex < $1.orderIndex }
+        
+        // GLOBAL COUNTER
+        var globalOrderIndex = 0
+        
+        // 1. Check User Preference ONCE at the start
+        let savedUnit = UserDefaults.standard.string(forKey: "unitSystem")
+        let isMetric = (savedUnit == "metric")
         
         for item in sortedItems {
             if let exercise = item.exercise {
-                // 2. Get ordered Sets for this exercise
                 let sortedTemplates = item.templateSets.sorted { $0.orderIndex < $1.orderIndex }
                 
+                // 2. Determine Unit for this specific exercise
+                var unitForThisExercise = "lbs"
+                if exercise.type == "Cardio" {
+                    unitForThisExercise = isMetric ? "km" : "mi"
+                } else {
+                    unitForThisExercise = isMetric ? "kg" : "lbs"
+                }
+                
                 if sortedTemplates.isEmpty {
-                    // Fallback: If they deleted all sets in the creator, add 1 empty set
-                    let set = WorkoutSet(weight: 0, reps: 0, orderIndex: 1)
+                    globalOrderIndex += 1
+                    // Create empty set with CORRECT UNIT
+                    let set = WorkoutSet(weight: 0, reps: 0, orderIndex: globalOrderIndex, unit: unitForThisExercise)
                     set.exercise = exercise
                     set.workoutSession = newSession
                     context.insert(set)
                 } else {
-                    // 3. Create real sets based on the template
-                    for (index, template) in sortedTemplates.enumerated() {
-                        let realSet = WorkoutSet(weight: 0, reps: template.targetReps, orderIndex: index + 1)
+                    for template in sortedTemplates {
+                        globalOrderIndex += 1
+                        // Create template set with CORRECT UNIT
+                        let realSet = WorkoutSet(weight: 0, reps: template.targetReps, orderIndex: globalOrderIndex, unit: unitForThisExercise)
                         realSet.exercise = exercise
                         realSet.workoutSession = newSession
-                        // Note: We don't copy weight because weight changes every session.
-                        // (Unless you want to copy the weight from the LAST time you did this exercise, which is an advanced feature for later).
                         context.insert(realSet)
                     }
                 }
             }
         }
-        
         self.currentSession = newSession
         self.startTimer()
     }
     
-    // 3. Start Empty
-    func startNewWorkout(context: ModelContext) {
-        self.modelContext = context
-        let newSession = WorkoutSession(name: "Freestyle Workout")
-        context.insert(newSession)
-        self.currentSession = newSession
-        self.startTimer()
-    }
-    
-    // MARK: - Session Management
+    // MARK: - Set Management
     
     func addSet(to exercise: Exercise, weight: Double, reps: Int) {
         guard let session = currentSession, let context = modelContext else { return }
         
-        let nextIndex = session.sets.filter { $0.exercise == exercise }.count + 1
-        let newSet = WorkoutSet(weight: weight, reps: reps, orderIndex: nextIndex)
+        // 1. Find highest ID
+        let highestIndex = session.sets.map { $0.orderIndex }.max() ?? 0
+        let nextIndex = highestIndex + 1
         
+        // 2. Check User Preference
+        let savedUnit = UserDefaults.standard.string(forKey: "unitSystem")
+        let isMetric = (savedUnit == "metric")
+        
+        // 3. Determine Unit
+        var unitToUse = "lbs"
+        if exercise.type == "Cardio" {
+            unitToUse = isMetric ? "km" : "mi"
+        } else {
+            unitToUse = isMetric ? "kg" : "lbs"
+        }
+        
+        // 4. Create
+        let newSet = WorkoutSet(weight: weight, reps: reps, orderIndex: nextIndex, unit: unitToUse)
         newSet.exercise = exercise
         newSet.workoutSession = session
         context.insert(newSet)
@@ -115,19 +125,29 @@ class ActiveWorkoutViewModel {
         currentSession = nil
     }
     
+    // MARK: - Timer
+    
     private func resumeSession(_ session: WorkoutSession) {
         self.currentSession = session
-        // Calculate how long it's been since start (simplified)
-        let gap = Date().timeIntervalSince(session.date)
-        self.elapsedSeconds = Int(gap)
+        if let start = session.startTime {
+            let gap = Date().timeIntervalSince(start)
+            self.elapsedSeconds = Int(gap)
+        } else {
+            let gap = Date().timeIntervalSince(session.date)
+            self.elapsedSeconds = Int(gap)
+        }
         startTimer()
     }
     
     private func startTimer() {
-        stopTimer() // Safety check
+        stopTimer()
+        if currentSession?.startTime == nil { currentSession?.startTime = Date() }
+        guard let start = currentSession?.startTime else { return }
+        
         isTimerRunning = true
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-            self.elapsedSeconds += 1
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            let diff = Date().timeIntervalSince(start)
+            self?.elapsedSeconds = Int(diff)
         }
     }
     

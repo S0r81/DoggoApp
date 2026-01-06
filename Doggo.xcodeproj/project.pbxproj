@@ -28,7 +28,6 @@
 		15E5BFDE2F0C2990006A00E4 /* ActiveWorkoutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15E5BFB92F0C2990006A00E4 /* ActiveWorkoutView.swift */; };
 		15E5BFDF2F0C2990006A00E4 /* ActiveWorkoutViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15E5BFBA2F0C2990006A00E4 /* ActiveWorkoutViewModel.swift */; };
 		15E5BFE02F0C2990006A00E4 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15E5BFBC2F0C2990006A00E4 /* DashboardView.swift */; };
-		15E5BFE12F0C2990006A00E4 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 15E5BFC62F0C2990006A00E4 /* Assets.xcassets */; };
 		15E5BFF22F0C4A14006A00E4 /* RoutineListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15E5BFF12F0C4A04006A00E4 /* RoutineListView.swift */; };
 		15E5BFF42F0C4F6B006A00E4 /* RoutineCreationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15E5BFF32F0C4A6F006A00E4 /* RoutineCreationView.swift */; };
 		15E5BFF62F0C5296006A00E4 /* RoutineItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15E5BFF52F0C5293006A00E4 /* RoutineItem.swift */; };
@@ -36,6 +35,10 @@
 		15E5BFFA2F0C5A0E006A00E4 /* ExerciseDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15E5BFF92F0C5A07006A00E4 /* ExerciseDetailView.swift */; };
 		15E5BFFC2F0C5B27006A00E4 /* CardioSetRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15E5BFFB2F0C5B22006A00E4 /* CardioSetRowView.swift */; };
 		15E5BFFE2F0C5C51006A00E4 /* View+Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15E5BFFD2F0C5C4E006A00E4 /* View+Theme.swift */; };
+		15E5C03B2F0C6DDC006A00E4 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 15E5C03A2F0C6DDC006A00E4 /* Assets.xcassets */; };
+		15E5C03D2F0D4822006A00E4 /* UnitSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15E5C03C2F0D481E006A00E4 /* UnitSystem.swift */; };
+		15E5C0402F0D8D7C006A00E4 /* HapticManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15E5C03F2F0D8D76006A00E4 /* HapticManager.swift */; };
+		15E5C0422F0D96CA006A00E4 /* DataSeeder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15E5C0412F0D96C6006A00E4 /* DataSeeder.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -77,7 +80,6 @@
 		15E5BFC02F0C2990006A00E4 /* ExerciseListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseListView.swift; sourceTree = "<group>"; };
 		15E5BFC22F0C2990006A00E4 /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
 		15E5BFC32F0C2990006A00E4 /* WorkoutDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutDetailView.swift; sourceTree = "<group>"; };
-		15E5BFC62F0C2990006A00E4 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = text; path = Assets.xcassets; sourceTree = "<group>"; };
 		15E5BFC82F0C2990006A00E4 /* EmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyStateView.swift; sourceTree = "<group>"; };
 		15E5BFC92F0C2990006A00E4 /* PrimaryButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrimaryButton.swift; sourceTree = "<group>"; };
 		15E5BFCB2F0C2990006A00E4 /* CardStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardStyle.swift; sourceTree = "<group>"; };
@@ -88,6 +90,10 @@
 		15E5BFF92F0C5A07006A00E4 /* ExerciseDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseDetailView.swift; sourceTree = "<group>"; };
 		15E5BFFB2F0C5B22006A00E4 /* CardioSetRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardioSetRowView.swift; sourceTree = "<group>"; };
 		15E5BFFD2F0C5C4E006A00E4 /* View+Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "View+Theme.swift"; sourceTree = "<group>"; };
+		15E5C03A2F0C6DDC006A00E4 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		15E5C03C2F0D481E006A00E4 /* UnitSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnitSystem.swift; sourceTree = "<group>"; };
+		15E5C03F2F0D8D76006A00E4 /* HapticManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticManager.swift; sourceTree = "<group>"; };
+		15E5C0412F0D96C6006A00E4 /* DataSeeder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataSeeder.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -159,6 +165,7 @@
 		15E5BFB42F0C2990006A00E4 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				15E5C03C2F0D481E006A00E4 /* UnitSystem.swift */,
 				15E5BFF72F0C54C3006A00E4 /* RoutineSetTemplate.swift */,
 				15E5BFF52F0C5293006A00E4 /* RoutineItem.swift */,
 				15E5BFB02F0C2990006A00E4 /* Exercise.swift */,
@@ -172,6 +179,7 @@
 		15E5BFB52F0C2990006A00E4 /* Core */ = {
 			isa = PBXGroup;
 			children = (
+				15E5C03E2F0D8D6E006A00E4 /* Utilities */,
 				15E5BFAF2F0C2990006A00E4 /* Extensions */,
 				15E5BFB42F0C2990006A00E4 /* Models */,
 			);
@@ -239,7 +247,7 @@
 		15E5BFC72F0C2990006A00E4 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
-				15E5BFC62F0C2990006A00E4 /* Assets.xcassets */,
+				15E5C03A2F0C6DDC006A00E4 /* Assets.xcassets */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -279,6 +287,15 @@
 				15E5BFF12F0C4A04006A00E4 /* RoutineListView.swift */,
 			);
 			path = Lift;
+			sourceTree = "<group>";
+		};
+		15E5C03E2F0D8D6E006A00E4 /* Utilities */ = {
+			isa = PBXGroup;
+			children = (
+				15E5C0412F0D96C6006A00E4 /* DataSeeder.swift */,
+				15E5C03F2F0D8D76006A00E4 /* HapticManager.swift */,
+			);
+			path = Utilities;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -392,7 +409,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				15E5BFE12F0C2990006A00E4 /* Assets.xcassets in Resources */,
+				15E5C03B2F0C6DDC006A00E4 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -423,6 +440,7 @@
 				15E5BFCE2F0C2990006A00E4 /* ExerciseListView.swift in Sources */,
 				15E5BFFA2F0C5A0E006A00E4 /* ExerciseDetailView.swift in Sources */,
 				15E5BFF82F0C54CA006A00E4 /* RoutineSetTemplate.swift in Sources */,
+				15E5C0422F0D96CA006A00E4 /* DataSeeder.swift in Sources */,
 				15E5BFCF2F0C2990006A00E4 /* RestTimerView.swift in Sources */,
 				15E5BFD02F0C2990006A00E4 /* ExerciseCreationView.swift in Sources */,
 				15E5BFD12F0C2990006A00E4 /* DashboardViewModel.swift in Sources */,
@@ -433,7 +451,9 @@
 				15E5BFD62F0C2990006A00E4 /* Date+Extensions.swift in Sources */,
 				15E5BFFC2F0C5B27006A00E4 /* CardioSetRowView.swift in Sources */,
 				15E5BFD72F0C2990006A00E4 /* HistoryView.swift in Sources */,
+				15E5C0402F0D8D7C006A00E4 /* HapticManager.swift in Sources */,
 				15E5BFD82F0C2990006A00E4 /* PrimaryButton.swift in Sources */,
+				15E5C03D2F0D4822006A00E4 /* UnitSystem.swift in Sources */,
 				15E5BFD92F0C2990006A00E4 /* Routine.swift in Sources */,
 				15E5BFF42F0C4F6B006A00E4 /* RoutineCreationView.swift in Sources */,
 				15E5BFF22F0C4A14006A00E4 /* RoutineListView.swift in Sources */,
@@ -606,6 +626,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 825JPA884M;
@@ -638,6 +659,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 825JPA884M;
