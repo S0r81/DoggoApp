@@ -4,11 +4,14 @@ struct SetRowView: View {
     @Bindable var set: WorkoutSet
     var index: Int
     
+    // NEW: Callback to tell the parent view "I finished this set!"
+    var onComplete: () -> Void
+    
     // Controls for the two pickers
     @State private var showWeightPicker = false
     @State private var showRepsPicker = false
     
-    // CHANGE 1: Dynamic Range based on the set's CURRENT unit
+    // Dynamic Range based on the set's CURRENT unit
     var weightOptions: [Double] {
         if set.unit == "kg" {
             // Metric: 0-300 in 1kg increments
@@ -31,7 +34,6 @@ struct SetRowView: View {
                 .frame(width: 20)
             
             // 2. Weight + Unit Input
-            // We wrap them in an HStack so they look like one box, but have separate interactions
             HStack(spacing: 0) {
                 
                 // A. The Number (Triggers Picker)
@@ -42,7 +44,7 @@ struct SetRowView: View {
                         .font(.title3)
                         .fontWeight(.bold)
                         .foregroundStyle(.blue)
-                        .frame(maxWidth: .infinity) // Take up remaining space
+                        .frame(maxWidth: .infinity)
                 }
                 .sheet(isPresented: $showWeightPicker) {
                     VStack {
@@ -52,7 +54,6 @@ struct SetRowView: View {
                         
                         Picker("Weight", selection: $set.weight) {
                             ForEach(weightOptions, id: \.self) { weight in
-                                // Show the unit in the picker too
                                 Text("\(weight, format: .number)").tag(weight)
                             }
                         }
@@ -72,8 +73,8 @@ struct SetRowView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 12)
-                        .padding(.vertical, 8) // Touch target size
-                        .background(Color.secondary.opacity(0.1)) // Subtle background for the menu button
+                        .padding(.vertical, 8)
+                        .background(Color.secondary.opacity(0.1))
                         .cornerRadius(4)
                 }
                 .padding(.trailing, 8)
@@ -81,9 +82,9 @@ struct SetRowView: View {
             .padding(.vertical, 8)
             .background(Color.blue.opacity(0.1))
             .cornerRadius(8)
-            .frame(maxWidth: .infinity) // Ensure the whole container stretches
+            .frame(maxWidth: .infinity)
             
-            // 3. Reps Input (Triggers Reps Sheet)
+            // 3. Reps Input
             Button(action: {
                 showRepsPicker = true
             }) {
@@ -111,8 +112,7 @@ struct SetRowView: View {
                     
                     Picker("Reps", selection: $set.reps) {
                         ForEach(repsOptions, id: \.self) { rep in
-                            Text("\(rep) reps")
-                                .tag(rep)
+                            Text("\(rep) reps").tag(rep)
                         }
                     }
                     .pickerStyle(.wheel)
@@ -122,11 +122,16 @@ struct SetRowView: View {
                 .presentationDragIndicator(.visible)
             }
             
-            // 4. Completion Checkbox
+            // 4. Completion Checkbox (UPDATED)
             Button(action: {
                 HapticManager.shared.impact(style: .medium)
                 withAnimation(.snappy) {
                     set.isCompleted.toggle()
+                }
+                
+                // NEW: If we just checked the box, trigger the timer!
+                if set.isCompleted {
+                    onComplete()
                 }
             }) {
                 Image(systemName: set.isCompleted ? "checkmark.circle.fill" : "circle")

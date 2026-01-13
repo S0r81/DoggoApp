@@ -5,24 +5,22 @@ struct WorkoutDetailView: View {
     @Environment(\.modelContext) private var modelContext
     let session: WorkoutSession
     
-    // Toggle for Edit Mode
     @State private var isEditing = false
-    
-    // NEW: Control the Exercise Picker Sheet
     @State private var showExerciseList = false
     
     var body: some View {
         List {
             // 1. Session Summary
             Section {
-                LabeledContent("Date", value: session.date.formatted(date: .abbreviated, time: .shortened))
-                LabeledContent("Duration", value: formatDuration(session.duration))
-                
-                // Add Rename Feature
                 if isEditing {
+                    DatePicker("Date", selection: Bindable(session).date, displayedComponents: [.date, .hourAndMinute])
+                        .foregroundStyle(.blue)
+                    
                     TextField("Session Name", text: Bindable(session).name)
                         .foregroundStyle(.blue)
                 } else {
+                    LabeledContent("Date", value: session.date.formatted(date: .abbreviated, time: .shortened))
+                    LabeledContent("Duration", value: formatDuration(session.duration))
                     LabeledContent("Name", value: session.name)
                 }
             }
@@ -38,13 +36,11 @@ struct WorkoutDetailView: View {
                         .sorted { $0.orderIndex < $1.orderIndex }
                     
                     ForEach(relevantSets) { set in
-                        // Use a subview to handle the Bindings cleanly
                         HistorySetRow(set: set, isEditing: isEditing, exerciseType: exercise.type) {
                             deleteSet(set)
                         }
                     }
                     
-                    // NEW: Add Set Button (Only in Edit Mode)
                     if isEditing {
                         Button(action: {
                             addSet(to: exercise)
@@ -52,11 +48,12 @@ struct WorkoutDetailView: View {
                             Label("Add Set", systemImage: "plus.circle.fill")
                                 .foregroundStyle(.blue)
                         }
+                        .buttonStyle(.borderless) // FIX 1: Make button click instant
                     }
                 }
             }
             
-            // 3. NEW: Add Exercise Button (Only in Edit Mode)
+            // 3. Add Exercise Button
             if isEditing {
                 Section {
                     Button(action: {
@@ -66,10 +63,14 @@ struct WorkoutDetailView: View {
                             .frame(maxWidth: .infinity, alignment: .center)
                             .padding(.vertical, 4)
                     }
+                    .buttonStyle(.borderless) // FIX 1: Make button click instant
                 }
             }
         }
         .navigationTitle(isEditing ? "Editing..." : session.name)
+        // FIX 2: Removed .onTapGesture (it was stealing clicks).
+        // We keep this one, which works perfectly when you scroll.
+        .scrollDismissesKeyboard(.interactively)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button(isEditing ? "Done" : "Edit") {
@@ -79,12 +80,16 @@ struct WorkoutDetailView: View {
                 }
                 .bold(isEditing)
             }
+            
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") {
+                     UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                }
+            }
         }
-        // 4. NEW: The Sheet to pick the exercise
         .sheet(isPresented: $showExerciseList) {
-            // Reuse your existing Exercise List
             ExerciseListView(currentSession: session) { selectedExercise in
-                // Logic: When selected, add a blank set to the session immediately
                 addSet(to: selectedExercise)
             }
         }
@@ -92,21 +97,15 @@ struct WorkoutDetailView: View {
     
     // MARK: - Helpers
     
-    // NEW: Logic to add a set to history
     private func addSet(to exercise: Exercise) {
-        // 1. Find the highest order index in the session so we add it at the end
         let highestIndex = session.sets.map { $0.orderIndex }.max() ?? 0
-        
-        // 2. Determine default unit based on user preference
         let savedUnitSystem = UserDefaults.standard.string(forKey: "unitSystem")
         let defaultUnit = (savedUnitSystem == "metric") ? "kg" : "lbs"
         
-        // 3. Create the set
         let newSet = WorkoutSet(weight: 0, reps: 0, orderIndex: highestIndex + 1, unit: defaultUnit)
         newSet.exercise = exercise
         newSet.workoutSession = session
         
-        // 4. Save
         modelContext.insert(newSet)
     }
     
@@ -135,8 +134,7 @@ struct WorkoutDetailView: View {
     }
 }
 
-// MARK: - Subview: The Magic Row
-// This switches between Text and TextField based on 'isEditing'
+// Subview remains unchanged...
 struct HistorySetRow: View {
     @Bindable var set: WorkoutSet
     var isEditing: Bool
@@ -145,26 +143,21 @@ struct HistorySetRow: View {
     
     var body: some View {
         HStack {
-            // Set Index Label
             if let index = set.workoutSession?.sets.filter({ $0.exercise == set.exercise }).sorted(by: { $0.orderIndex < $1.orderIndex }).firstIndex(of: set) {
                 Text("Set \(index + 1)")
                     .foregroundStyle(.secondary)
                     .frame(width: 45, alignment: .leading)
             } else {
-                Text("-")
-                    .frame(width: 45)
+                Text("-").frame(width: 45)
             }
             
             if isEditing {
-                // --- EDIT MODE ---
                 if exerciseType == "Cardio" {
-                    // Cardio Inputs
                     TextField("Dist", value: $set.distance, format: .number)
                         .keyboardType(.decimalPad)
                         .textFieldStyle(.roundedBorder)
                         .frame(maxWidth: 70)
                     
-                    // CHANGE: Toggle Unit Button (mi <-> km)
                     Button(set.unit) {
                         set.unit = (set.unit == "mi") ? "km" : "mi"
                     }
@@ -175,17 +168,14 @@ struct HistorySetRow: View {
                         .keyboardType(.decimalPad)
                         .textFieldStyle(.roundedBorder)
                         .frame(maxWidth: 60)
-                    Text("m")
-                        .font(.caption)
+                    Text("m").font(.caption)
                     
                 } else {
-                    // Strength Inputs
                     TextField("Lbs", value: $set.weight, format: .number)
                         .keyboardType(.decimalPad)
                         .textFieldStyle(.roundedBorder)
                         .frame(maxWidth: 80)
                     
-                    // CHANGE: Toggle Unit Button (lbs <-> kg)
                     Button(set.unit) {
                         set.unit = (set.unit == "lbs") ? "kg" : "lbs"
                     }
@@ -199,38 +189,26 @@ struct HistorySetRow: View {
                         .textFieldStyle(.roundedBorder)
                         .frame(maxWidth: 60)
                     
-                    Text("r")
-                        .font(.caption)
+                    Text("r").font(.caption)
                 }
                 
                 Spacer()
-                
-                // Delete Button
                 Button(action: onDelete) {
-                    Image(systemName: "trash.fill")
-                        .foregroundStyle(.red)
+                    Image(systemName: "trash.fill").foregroundStyle(.red)
                 }
                 .buttonStyle(.plain)
                 .padding(.leading, 8)
                 
             } else {
-                // --- READ-ONLY MODE ---
                 Spacer()
-                
                 if exerciseType == "Cardio" {
                     VStack(alignment: .trailing) {
-                        // CHANGE: Show stored unit
-                        Text("\(set.distance?.formatted() ?? "0") \(set.unit)")
-                            .bold()
-                        Text("\(set.duration?.formatted() ?? "0") min")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        Text("\(set.distance?.formatted() ?? "0") \(set.unit)").bold()
+                        Text("\(set.duration?.formatted() ?? "0") min").font(.caption).foregroundStyle(.secondary)
                     }
                 } else {
                     HStack {
-                        // CHANGE: Show stored unit
-                        Text("\(Int(set.weight)) \(set.unit)")
-                            .bold()
+                        Text("\(Int(set.weight)) \(set.unit)").bold()
                         Text("x")
                         Text("\(set.reps)")
                     }

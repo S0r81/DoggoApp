@@ -7,128 +7,309 @@
 
 import SwiftUI
 import SwiftData
-import Charts // <--- NEW: Required for the Bar Chart
+import Charts
 
 struct DashboardView: View {
-    // 1. Initialize the ViewModel
+    @Binding var selectedTab: Int
+    
     @State private var viewModel = DashboardViewModel()
     @AppStorage("userTheme") private var userTheme: AppTheme = .light
     @AppStorage("unitSystem") private var unitSystem: UnitSystem = .imperial
     @State private var showSettings = false
     
-    // 2. Fetch data
+    // Fetch History
     @Query(
         filter: #Predicate<WorkoutSession> { $0.isCompleted == true },
         sort: \WorkoutSession.date,
         order: .reverse
     ) var recentSessions: [WorkoutSession]
     
+    let columns = [GridItem(.flexible()), GridItem(.flexible())]
+    
+    // MARK: - Main Body
     var body: some View {
         NavigationStack {
-            ScrollView {
+            ScrollView(showsIndicators: false) {
                 VStack(spacing: 24) {
-                    // Header
-                    HStack {
-                        VStack(alignment: .leading) {
-                            Text(viewModel.greetingMessage)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                            Text("Let's get to work.")
-                                .font(.title)
-                                .bold()
-                        }
-                        Spacer()
-                    }
-                    .padding(.horizontal)
-                    
-                    // NEW: Weekly Activity Chart
-                    // This gives a quick visual of consistency
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("This Week")
-                            .font(.headline)
-                            .padding(.horizontal)
-                        
-                        Chart {
-                            // Uses the ViewModel logic to get daily counts
-                            ForEach(viewModel.getWeeklyActivity(from: recentSessions)) { day in
-                                BarMark(
-                                    x: .value("Day", day.day),
-                                    y: .value("Workouts", day.count)
-                                )
-                                // Active days are Blue, Empty days are faint Gray
-                                .foregroundStyle(day.count > 0 ? Color.blue : Color.gray.opacity(0.3))
-                                .cornerRadius(4)
-                            }
-                        }
-                        .frame(height: 150)
-                        .padding()
-                        .background(Color(uiColor: .secondarySystemBackground))
-                        .cornerRadius(12)
-                        .padding(.horizontal)
-                    }
-                    
-                    // Stats Grid
-                    HStack(spacing: 16) {
-                        // Card 1: Total Workouts
-                        StatCard(
-                            title: "Total Workouts",
-                            value: "\(recentSessions.count)",
-                            icon: "dumbbell.fill",
-                            color: .blue
-                        )
-                        
-                        // Card 2: Total Volume (Dynamic Unit Support!)
-                        // This calculates total weight lifted, normalized to your lbs/kg setting
-                        StatCard(
-                            title: "Total Volume",
-                            value: viewModel.getTotalVolume(from: recentSessions, preferredUnit: unitSystem.rawValue),
-                            icon: "chart.bar.fill",
-                            color: .green
-                        )
-                    }
-                    .padding(.horizontal)
-                    
-                    // Recent Activity
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Recent Activity")
-                            .font(.headline)
-                            .padding(.horizontal)
-                        
-                        if let lastWorkout = recentSessions.first {
-                            NavigationLink(destination: WorkoutDetailView(session: lastWorkout)) {
-                                RecentWorkoutRow(session: lastWorkout)
-                            }
-                        } else {
-                            Text("No workouts yet. Go to the Workout tab to start!")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal)
-                        }
-                    }
-                }
-                .padding(.top)
-            }
-            .toolbar {
-                Button(action: { showSettings = true }) {
-                    Image(systemName: "gearshape")
+                    headerView
+                    quickActionsView
+                    statsGridView
+                    weeklyConsistencyView
+                    recentBestsView
+                    workoutFocusView
+                    lastWorkoutView
                 }
             }
+            .background(Color(uiColor: .systemGroupedBackground))
             .sheet(isPresented: $showSettings) {
-                AppSettingsView()
-                    .presentationDetents([.medium])
+                AppSettingsView().presentationDetents([.medium])
             }
             .navigationTitle("Dashboard")
+            .navigationBarTitleDisplayMode(.inline)
         }
+    }
+    
+    // MARK: - Sub-Views
+    
+    private var headerView: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(viewModel.greetingMessage.uppercased())
+                    .font(.caption).fontWeight(.bold).foregroundStyle(.secondary)
+                Text("Let's get to work.")
+                    .font(.title).bold()
+            }
+            Spacer()
+            Button(action: { showSettings = true }) {
+                Image(systemName: "person.crop.circle")
+                    .font(.largeTitle)
+                    .foregroundStyle(.gray.opacity(0.5))
+            }
+        }
+        .padding(.horizontal)
+        .padding(.top, 8)
+    }
+    
+    private var quickActionsView: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 12) {
+                Button(action: { selectedTab = 2 }) {
+                    QuickActionButton(title: "Log Workout", icon: "plus", color: .blue)
+                }
+                
+                Button(action: { selectedTab = 1 }) {
+                    QuickActionButton(title: "New Routine", icon: "list.bullet.clipboard", color: .purple)
+                }
+                
+                NavigationLink(destination: HistoryView()) {
+                    QuickActionButton(title: "History", icon: "clock.arrow.circlepath", color: .orange)
+                }
+            }
+            .padding(.horizontal)
+        }
+    }
+    
+    private var statsGridView: some View {
+        LazyVGrid(columns: columns, spacing: 16) {
+            StatCard(title: "Workouts", value: "\(recentSessions.count)", icon: "dumbbell.fill", color: .blue)
+            StatCard(title: "Volume", value: viewModel.getTotalVolume(from: recentSessions, preferredUnit: unitSystem.rawValue), icon: "chart.bar.fill", color: .green)
+            StatCard(title: "Time", value: viewModel.getTotalDuration(from: recentSessions), icon: "clock.fill", color: .orange)
+            StatCard(title: "Streak", value: "\(viewModel.getCurrentStreak(from: recentSessions)) Days", icon: "flame.fill", color: .red)
+        }
+        .padding(.horizontal)
+    }
+    
+    private var weeklyConsistencyView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Consistency").font(.headline).padding(.horizontal)
+            Chart {
+                ForEach(viewModel.getWeeklyActivity(from: recentSessions)) { day in
+                    BarMark(x: .value("Day", day.day), y: .value("Workouts", day.count))
+                        .foregroundStyle(LinearGradient(colors: day.count > 0 ? [.blue, .purple] : [.gray.opacity(0.2)], startPoint: .bottom, endPoint: .top))
+                        .cornerRadius(6)
+                }
+            }
+            .chartYAxis(.hidden)
+            .frame(height: 140)
+            .padding()
+            .background(Color(uiColor: .secondarySystemBackground))
+            .cornerRadius(16)
+            .padding(.horizontal)
+        }
+    }
+    
+    @ViewBuilder
+    private var recentBestsView: some View {
+        if !recentSessions.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Recent Heavy Lifts").font(.headline).padding(.horizontal)
+                
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 16) {
+                        ForEach(viewModel.getRecentBests(from: recentSessions)) { best in
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack {
+                                    Image(systemName: "trophy.fill").foregroundStyle(.yellow)
+                                    Text(best.exerciseName).font(.subheadline).bold().lineLimit(1)
+                                }
+                                Text("\(Int(best.weight)) \(best.unit)")
+                                    .font(.title2).bold().monospacedDigit()
+                                Text(best.date.formatted(date: .abbreviated, time: .omitted))
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                            .padding()
+                            .frame(width: 160)
+                            .background(Color(uiColor: .secondarySystemBackground))
+                            .cornerRadius(16)
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+            }
+        }
+    }
+    
+    private var workoutFocusView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Workout Focus").font(.headline).padding(.horizontal)
+            
+            let data = viewModel.getTopExercises(from: recentSessions)
+            let totalSets = data.reduce(0) { $0 + $1.count }
+            
+            // Defines a simple color cycle for the legend to loosely match the chart
+            let colors: [Color] = [.blue, .green, .orange, .purple, .pink]
+            
+            HStack(spacing: 20) {
+                Chart(data) { item in
+                    SectorMark(
+                        angle: .value("Count", item.count),
+                        innerRadius: .ratio(0.65),
+                        angularInset: 2
+                    )
+                    .cornerRadius(5) // FIX 1: CornerRadius must be BEFORE foregroundStyle
+                    .foregroundStyle(by: .value("Name", item.name))
+                }
+                .chartLegend(.hidden)
+                .chartBackground { proxy in
+                    VStack(spacing: 0) {
+                        Text("\(totalSets)").font(.title2).bold().foregroundStyle(.primary)
+                        Text("Sets").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                .frame(width: 140, height: 140)
+                
+                // Legend
+                VStack(alignment: .leading, spacing: 10) {
+                    // We use Array(zip) to get index for color matching
+                    ForEach(Array(data.prefix(4).enumerated()), id: \.offset) { index, item in
+                        HStack {
+                            Circle()
+                                // FIX 2: Use a standard Color, not .value(...)
+                                .foregroundStyle(colors[index % colors.count])
+                                .frame(width: 8, height: 8)
+                            Text(item.name).font(.system(size: 14, weight: .medium)).lineLimit(1)
+                            Spacer()
+                            Text("\(item.count)").font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .padding()
+            .background(Color(uiColor: .secondarySystemBackground))
+            .cornerRadius(16)
+            .padding(.horizontal)
+        }
+    }
+    
+    private var lastWorkoutView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Last Session").font(.headline)
+                Spacer()
+                NavigationLink(destination: HistoryView()) {
+                    Text("History >").font(.subheadline).foregroundStyle(.blue)
+                }
+            }
+            .padding(.horizontal)
+            
+            if let last = recentSessions.first {
+                NavigationLink(destination: WorkoutDetailView(session: last)) {
+                    LastWorkoutHero(session: last)
+                }
+            } else {
+                ContentUnavailableView("Start your journey", systemImage: "figure.run")
+            }
+        }
+        .padding(.bottom, 40)
     }
 }
 
-// MARK: - Subviews (Unchanged)
+// MARK: - Components
+
+struct QuickActionButton: View {
+    let title: String
+    let icon: String
+    let color: Color
+    
+    var body: some View {
+        HStack {
+            Image(systemName: icon)
+            Text(title).fontWeight(.semibold)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(color.opacity(0.15))
+        .foregroundStyle(color)
+        .cornerRadius(20)
+    }
+}
+
+struct LastWorkoutHero: View {
+    let session: WorkoutSession
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                VStack(alignment: .leading) {
+                    Text(session.name)
+                        .font(.title3).bold()
+                        .foregroundStyle(.white)
+                    Text(session.date.formatted(date: .complete, time: .shortened))
+                        .font(.caption).foregroundStyle(.gray)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .foregroundStyle(.gray)
+            }
+            
+            Divider().background(Color.gray.opacity(0.3))
+            
+            HStack(spacing: 24) {
+                VStack(alignment: .leading) {
+                    Text("Duration").font(.caption).foregroundStyle(.gray)
+                    Text("\(Int(session.duration / 60)) min").bold().foregroundStyle(.white)
+                }
+                
+                VStack(alignment: .leading) {
+                    Text("Exercises").font(.caption).foregroundStyle(.gray)
+                    Text("\(getUniqueExerciseCount(session))").bold().foregroundStyle(.white)
+                }
+                
+                VStack(alignment: .leading) {
+                    Text("Sets").font(.caption).foregroundStyle(.gray)
+                    Text("\(session.sets.count)").bold().foregroundStyle(.white)
+                }
+            }
+        }
+        .padding(20)
+        .background(
+            LinearGradient(colors: [Color(uiColor: .secondarySystemBackground), Color.black], startPoint: .topLeading, endPoint: .bottomTrailing)
+        )
+        .cornerRadius(20)
+        .padding(.horizontal)
+        .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 5)
+    }
+    
+    func getUniqueExerciseCount(_ session: WorkoutSession) -> Int {
+        let unique = Set(session.sets.compactMap { $0.exercise?.id })
+        return unique.count
+    }
+}
 
 struct AppSettingsView: View {
     @AppStorage("userTheme") private var userTheme: AppTheme = .light
     @AppStorage("unitSystem") private var unitSystem: UnitSystem = .imperial
+    @AppStorage("defaultRestSeconds") private var defaultRestSeconds: Int = 90
+    
+    @Query(
+        filter: #Predicate<WorkoutSession> { $0.isCompleted == true },
+        sort: \WorkoutSession.date,
+        order: .reverse
+    ) var allHistory: [WorkoutSession]
+    
     @Environment(\.dismiss) var dismiss
+    
+    let restOptions = [30, 60, 90, 120, 180, 240, 300]
     
     var body: some View {
         NavigationStack {
@@ -150,6 +331,30 @@ struct AppSettingsView: View {
                     .pickerStyle(.segmented)
                 }
                 
+                Section("Timer") {
+                    Picker("Default Rest Time", selection: $defaultRestSeconds) {
+                        ForEach(restOptions, id: \.self) { seconds in
+                            let min = seconds / 60
+                            let sec = seconds % 60
+                            if sec == 0 {
+                                Text("\(min) min").tag(seconds)
+                            } else {
+                                Text("\(min)m \(sec)s").tag(seconds)
+                            }
+                        }
+                    }
+                }
+                
+                Section("Data Management") {
+                    if let csvURL = DataExporter.createCSVFile(from: allHistory) {
+                        ShareLink(item: csvURL) {
+                            Label("Export History to CSV", systemImage: "square.and.arrow.up")
+                        }
+                    } else {
+                        Text("Unable to generate export").foregroundStyle(.secondary)
+                    }
+                }
+                
                 Section {
                     Text("Doggo App v1.0")
                         .foregroundStyle(.secondary)
@@ -162,6 +367,36 @@ struct AppSettingsView: View {
                 Button("Done") { dismiss() }
             }
         }
+    }
+}
+
+struct StatCard: View {
+    let title: String
+    let value: String
+    let icon: String
+    let color: Color
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: icon)
+                    .foregroundStyle(color)
+                    .font(.title3)
+                Spacer()
+                Text(value)
+                    .font(.title)
+                    .bold()
+                    .minimumScaleFactor(0.8)
+                    .lineLimit(1)
+            }
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding()
+        .background(Color(uiColor: .secondarySystemBackground))
+        .cornerRadius(12)
+        .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 2)
     }
 }
 
@@ -189,32 +424,7 @@ struct RecentWorkoutRow: View {
     }
 }
 
-struct StatCard: View {
-    let title: String
-    let value: String
-    let icon: String
-    let color: Color
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Image(systemName: icon)
-                    .foregroundStyle(color)
-                    .font(.title3)
-                Spacer()
-                Text(value)
-                    .font(.title)
-                    .bold()
-                    .minimumScaleFactor(0.8) // Helps if the volume number gets huge
-                    .lineLimit(1)
-            }
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .padding()
-        .background(Color(uiColor: .secondarySystemBackground))
-        .cornerRadius(12)
-        .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 2)
-    }
+#Preview {
+    DashboardView(selectedTab: .constant(0))
+        .modelContainer(for: [WorkoutSession.self, Exercise.self])
 }

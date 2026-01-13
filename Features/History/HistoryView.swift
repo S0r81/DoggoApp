@@ -16,6 +16,8 @@ struct HistoryView: View {
         order: .reverse
     ) var sessions: [WorkoutSession]
     
+    @Environment(\.modelContext) private var modelContext
+    
     var body: some View {
         NavigationStack {
             List {
@@ -47,14 +49,33 @@ struct HistoryView: View {
                 }
             }
             .navigationTitle("History")
+            // NEW: Add Button to Log Past Workout
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(action: createManualEntry) {
+                        Image(systemName: "plus")
+                    }
+                }
+            }
         }
     }
     
-    // Allow deleting history items
-    @Environment(\.modelContext) private var modelContext
+    // NEW: Function to create a blank history entry
+    private func createManualEntry() {
+        let newSession = WorkoutSession(name: "Manual Log")
+        newSession.startTime = Date()
+        newSession.date = Date()
+        newSession.isCompleted = true // Mark as history immediately
+        newSession.duration = 3600 // Default 60 mins
+        
+        modelContext.insert(newSession)
+    }
+    
     private func deleteSession(offsets: IndexSet) {
-        for index in offsets {
-            modelContext.delete(sessions[index])
+        withAnimation {
+            for index in offsets {
+                modelContext.delete(sessions[index])
+            }
         }
     }
 }
