@@ -14,12 +14,17 @@ class RoutineItem {
     @Relationship var exercise: Exercise?
     var routine: Routine?
     
-    // NEW: The blueprint sets for this specific exercise in this routine
+    // NEW: The instruction from the AI (e.g., "Aim for 135lbs")
+    var note: String?
+    
+    // The blueprint sets for this specific exercise in this routine
     @Relationship(deleteRule: .cascade, inverse: \RoutineSetTemplate.routineItem)
     var templateSets: [RoutineSetTemplate] = []
     
-    init(orderIndex: Int, exercise: Exercise) {
+    // Updated Init to include 'note'
+    init(orderIndex: Int, exercise: Exercise, note: String? = nil) {
         self.orderIndex = orderIndex
         self.exercise = exercise
+        self.note = note
     }
 }

@@ -80,6 +80,10 @@ class ActiveWorkoutViewModel {
                     let set = WorkoutSet(weight: 0, reps: 0, orderIndex: globalOrderIndex, unit: unitForThisExercise)
                     set.exercise = exercise
                     set.workoutSession = newSession
+                    
+                    // FIX: Link the set to the plan so we can see the Notes
+                    set.routineItem = item
+                    
                     context.insert(set)
                 } else {
                     for template in sortedTemplates {
@@ -87,6 +91,10 @@ class ActiveWorkoutViewModel {
                         let realSet = WorkoutSet(weight: 0, reps: template.targetReps, orderIndex: globalOrderIndex, unit: unitForThisExercise)
                         realSet.exercise = exercise
                         realSet.workoutSession = newSession
+                        
+                        // FIX: Link the set to the plan so we can see the Notes
+                        realSet.routineItem = item
+                        
                         context.insert(realSet)
                     }
                 }
@@ -117,6 +125,10 @@ class ActiveWorkoutViewModel {
         let newSet = WorkoutSet(weight: weight, reps: reps, orderIndex: nextIndex, unit: unitToUse)
         newSet.exercise = exercise
         newSet.workoutSession = session
+        
+        // Note: For manually added sets (freestyle), there is no 'routineItem' to link to,
+        // so we leave it nil. This is correct behavior.
+        
         context.insert(newSet)
     }
     

@@ -130,22 +130,47 @@ struct WorkoutSessionListView: View {
         List {
             let activeExercises = getExercises(from: session)
             
-            ForEach(activeExercises) { exercise in
-                Section(header: Text(exercise.name).font(.title3).bold()) {
+            // FIX: Added 'id: \.self' to prevent the generic Range<Int> error
+            ForEach(activeExercises, id: \.self) { exercise in
+                
+                // 1. Find sets for this exercise
+                let relevantSets = session.sets
+                    .filter { $0.exercise == exercise }
+                    .sorted { $0.orderIndex < $1.orderIndex }
+                
+                // 2. Check if there is an AI Note attached to the routine item
+                let aiNote = relevantSets.first?.routineItem?.note
+                
+                Section(header:
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(exercise.name)
+                            .font(.title3)
+                            .bold()
+                            .foregroundStyle(.primary)
                     
-                    let relevantSets = session.sets
-                        .filter { $0.exercise == exercise }
-                        .sorted { $0.orderIndex < $1.orderIndex }
-                    
-                    ForEach(relevantSets) { set in
+                        // 3. Display the Note if it exists
+                        if let note = aiNote, !note.isEmpty {
+                            HStack(spacing: 4) {
+                                Image(systemName: "wand.and.stars")
+                                    .font(.caption2)
+                                Text(note)
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                            }
+                            .foregroundStyle(.blue)
+                            .textCase(nil) // Prevents iOS from forcing UPPERCASE
+                        }
+                    }
+                    .padding(.vertical, 4)
+                ) {
+                    // FIX: Added 'id: \.self' here too for safety
+                    ForEach(relevantSets, id: \.self) { set in
                         let index = (relevantSets.firstIndex(of: set) ?? 0) + 1
                         
                         if exercise.type == "Cardio" {
                             CardioSetRowView(set: set, index: index)
                         } else {
-                            // HERE IS THE MAGIC LINK:
                             SetRowView(set: set, index: index) {
-                                // When checked, start the timer!
                                 viewModel.startRestTimer()
                             }
                         }
@@ -180,6 +205,7 @@ struct WorkoutSessionListView: View {
         var unique: [Exercise] = []
         for set in sortedSets {
             if let exercise = set.exercise {
+                // Ensure we haven't already added this exercise
                 if !unique.contains(where: { $0.id == exercise.id }) {
                     unique.append(exercise)
                 }

@@ -10,7 +10,6 @@ class WorkoutSet {
     var isCompleted: Bool
     
     // NEW: Store the unit for this specific set
-    // Defaults to "lbs" for migration safety
     var unit: String = "lbs"
     
     // Cardio specific
@@ -22,6 +21,9 @@ class WorkoutSet {
     
     @Relationship(inverse: \Exercise.sets)
     var exercise: Exercise?
+    
+    // NEW: Link to the RoutineItem so we can read the "Note" while working out
+    var routineItem: RoutineItem?
     
     init(weight: Double, reps: Int, orderIndex: Int, unit: String = "lbs") {
         self.id = UUID()

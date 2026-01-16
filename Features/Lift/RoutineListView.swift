@@ -12,6 +12,7 @@ struct RoutineListView: View {
     // Sheets
     @State private var showCreateRoutine = false
     @State private var showCreateExercise = false
+    @State private var showGenerator = false
     
     var body: some View {
         NavigationStack {
@@ -35,14 +36,22 @@ struct RoutineListView: View {
             .navigationTitle("Lift")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button(action: {
-                        if selectedView == "Routines" {
-                            showCreateRoutine = true
-                        } else {
-                            showCreateExercise = true
+                    HStack {
+                        // 1. The New AI Generator Button
+                        Button(action: { showGenerator = true }) {
+                            Image(systemName: "wand.and.stars")
                         }
-                    }) {
-                        Image(systemName: "plus")
+                        
+                        // 2. The Existing "Plus" Button
+                        Button(action: {
+                            if selectedView == "Routines" {
+                                showCreateRoutine = true
+                            } else {
+                                showCreateExercise = true
+                            }
+                        }) {
+                            Image(systemName: "plus")
+                        }
                     }
                 }
             }
@@ -54,6 +63,9 @@ struct RoutineListView: View {
             .sheet(isPresented: $showCreateExercise) {
                 ExerciseCreationView()
                     .presentationDetents([.medium])
+            }
+            .sheet(isPresented: $showGenerator) {
+                RoutineGeneratorView()
             }
         }
     }

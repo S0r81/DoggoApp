@@ -11,11 +11,14 @@ import Charts
 
 struct DashboardView: View {
     @Binding var selectedTab: Int
-    
+    @State private var showCoach = false
     @State private var viewModel = DashboardViewModel()
     @AppStorage("userTheme") private var userTheme: AppTheme = .light
     @AppStorage("unitSystem") private var unitSystem: UnitSystem = .imperial
-    @State private var showSettings = false
+    
+    // Sheets
+    @State private var showSettings = false // App Settings (Theme/Units)
+    @State private var showProfile = false  // User Profile (Stats/Goals)
     
     // Fetch History
     @Query(
@@ -23,6 +26,9 @@ struct DashboardView: View {
         sort: \WorkoutSession.date,
         order: .reverse
     ) var recentSessions: [WorkoutSession]
+    
+    // NEW: Fetch Profile for Greeting & Edit
+    @Query var profiles: [UserProfile]
     
     let columns = [GridItem(.flexible()), GridItem(.flexible())]
     
@@ -41,11 +47,34 @@ struct DashboardView: View {
                 }
             }
             .background(Color(uiColor: .systemGroupedBackground))
+            
+            // 1. App Settings Sheet
             .sheet(isPresented: $showSettings) {
                 AppSettingsView().presentationDetents([.medium])
             }
+            // 2. AI Coach Sheet
+            .sheet(isPresented: $showCoach) {
+                CoachView(sessions: recentSessions)
+                    .presentationDetents([.medium, .large])
+            }
+            // 3. NEW: Profile Settings Sheet
+            .sheet(isPresented: $showProfile) {
+                if let user = profiles.first {
+                    ProfileSettingsView(profile: user)
+                } else {
+                    ContentUnavailableView("Profile Error", systemImage: "exclamationmark.triangle")
+                }
+            }
             .navigationTitle("Dashboard")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                // Moved App Settings to Toolbar (Gear Icon)
+                ToolbarItem(placement: .primaryAction) {
+                    Button(action: { showSettings = true }) {
+                        Image(systemName: "gearshape")
+                    }
+                }
+            }
         }
     }
     
@@ -54,16 +83,25 @@ struct DashboardView: View {
     private var headerView: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
-                Text(viewModel.greetingMessage.uppercased())
-                    .font(.caption).fontWeight(.bold).foregroundStyle(.secondary)
+                // NEW: Dynamic Greeting
+                if let name = profiles.first?.name {
+                    Text("\(viewModel.greetingMessage), \(name)".uppercased())
+                        .font(.caption).fontWeight(.bold).foregroundStyle(.secondary)
+                } else {
+                    Text(viewModel.greetingMessage.uppercased())
+                        .font(.caption).fontWeight(.bold).foregroundStyle(.secondary)
+                }
+                
                 Text("Let's get to work.")
                     .font(.title).bold()
             }
             Spacer()
-            Button(action: { showSettings = true }) {
+            
+            // UPDATED: Tapping the Avatar opens Profile Settings
+            Button(action: { showProfile = true }) {
                 Image(systemName: "person.crop.circle")
-                    .font(.largeTitle)
-                    .foregroundStyle(.gray.opacity(0.5))
+                    .font(.system(size: 40)) // Slightly larger
+                    .foregroundStyle(Color.accentColor) // Active color
             }
         }
         .padding(.horizontal)
@@ -71,23 +109,24 @@ struct DashboardView: View {
     }
     
     private var quickActionsView: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
-                Button(action: { selectedTab = 2 }) {
-                    QuickActionButton(title: "Log Workout", icon: "plus", color: .blue)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    Button(action: { selectedTab = 2 }) {
+                        QuickActionButton(title: "Log Workout", icon: "plus", color: .blue)
+                    }
+                    
+                    Button(action: { selectedTab = 1 }) {
+                        QuickActionButton(title: "New Routine", icon: "list.bullet.clipboard", color: .purple)
+                    }
+                    
+                    // Triggers the Coach
+                    Button(action: { showCoach = true }) {
+                        QuickActionButton(title: "AI Coach", icon: "brain.head.profile", color: .orange)
+                    }
                 }
-                
-                Button(action: { selectedTab = 1 }) {
-                    QuickActionButton(title: "New Routine", icon: "list.bullet.clipboard", color: .purple)
-                }
-                
-                NavigationLink(destination: HistoryView()) {
-                    QuickActionButton(title: "History", icon: "clock.arrow.circlepath", color: .orange)
-                }
+                .padding(.horizontal)
             }
-            .padding(.horizontal)
         }
-    }
     
     private var statsGridView: some View {
         LazyVGrid(columns: columns, spacing: 16) {
@@ -422,9 +461,4 @@ struct RecentWorkoutRow: View {
         .cornerRadius(12)
         .padding(.horizontal)
     }
-}
-
-#Preview {
-    DashboardView(selectedTab: .constant(0))
-        .modelContainer(for: [WorkoutSession.self, Exercise.self])
 }
