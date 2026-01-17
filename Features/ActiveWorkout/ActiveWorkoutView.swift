@@ -5,9 +5,12 @@ struct ActiveWorkoutView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var viewModel = ActiveWorkoutViewModel()
     
+    // UI State
+    @State private var showExerciseList = false
+    @State private var collapsedExercises: Set<UUID> = []
+    
     // We only need this query if we plan to use it for the picker
     @Query private var exercises: [Exercise]
-    @State private var showExerciseList = false
     
     var body: some View {
         NavigationStack {
@@ -23,13 +26,76 @@ struct ActiveWorkoutView: View {
                 
                 Divider()
                 
-                // 2. The Main List (Extracted to subview to fix compiler error)
+                // 2. The Main List
                 if let session = viewModel.currentSession {
-                    WorkoutSessionListView(
-                        session: session,
-                        viewModel: viewModel,
-                        showExerciseList: $showExerciseList
-                    )
+                    List {
+                        let activeExercises = getExercises(from: session)
+                        
+                        ForEach(activeExercises, id: \.self) { exercise in
+                            Section {
+                                // ONLY SHOW SETS IF NOT COLLAPSED
+                                if !collapsedExercises.contains(exercise.id) {
+                                    let relevantSets = getSets(for: exercise, in: session)
+                                    
+                                    ForEach(relevantSets) { set in
+                                        let index = (relevantSets.firstIndex(of: set) ?? 0) + 1
+                                        
+                                        // Use the specific row based on type
+                                        if exercise.type == "Cardio" {
+                                            CardioSetRowView(set: set, index: index)
+                                                .listRowSeparator(.hidden)
+                                        } else {
+                                            SetRowView(set: set, index: index) {
+                                                // Trigger Rest Timer when checked
+                                                viewModel.startRestTimer()
+                                            }
+                                            .listRowSeparator(.hidden)
+                                        }
+                                    }
+                                    .onDelete { indexSet in
+                                        deleteSets(at: indexSet, from: relevantSets)
+                                    }
+                                    
+                                    // ADD SET BUTTON
+                                    Button {
+                                        HapticManager.shared.impact(style: .light)
+                                        viewModel.addSet(to: exercise, weight: 0, reps: 0)
+                                    } label: {
+                                        Label("Add Set", systemImage: "plus.circle.fill")
+                                            .font(.subheadline)
+                                            .foregroundStyle(.blue)
+                                            .frame(maxWidth: .infinity, alignment: .center)
+                                            .padding(.vertical, 4)
+                                    }
+                                }
+                            } header: {
+                                // STICKY HEADER WITH REORDERING
+                                WorkoutSectionHeader(
+                                    exercise: exercise,
+                                    session: session,
+                                    isCollapsed: collapsedExercises.contains(exercise.id),
+                                    onToggleCollapse: { toggleCollapse(for: exercise) },
+                                    onMoveUp: { moveExercise(exercise, direction: -1) },
+                                    onMoveDown: { moveExercise(exercise, direction: 1) }
+                                )
+                            }
+                        }
+                        
+                        // ADD EXERCISE BUTTON AT BOTTOM
+                        Section {
+                            Button {
+                                showExerciseList = true
+                            } label: {
+                                Label("Add Exercise", systemImage: "plus")
+                                    .font(.headline)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 8)
+                            }
+                        }
+                    }
+                    .listStyle(.insetGrouped)
+                    // SMOOTH ANIMATION
+                    .animation(.default, value: collapsedExercises)
                 } else {
                     // Empty State
                     ContentUnavailableView("No Active Workout", systemImage: "dumbbell.fill")
@@ -42,6 +108,8 @@ struct ActiveWorkoutView: View {
                 }
             }
             .navigationTitle("Log Workout")
+            .navigationBarTitleDisplayMode(.inline)
+            
             // 3. THE REST TIMER OVERLAY
             .overlay(alignment: .bottom) {
                 if viewModel.isRestTimerActive {
@@ -52,7 +120,6 @@ struct ActiveWorkoutView: View {
                     )
                     .padding(.bottom, 20)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
-                    // .animation(.snappy, value: viewModel.isRestTimerActive) // Optional animation
                 }
             }
             .onAppear {
@@ -85,9 +152,82 @@ struct ActiveWorkoutView: View {
             }
         }
     }
+    
+    // MARK: - Helpers
+    
+    private func getExercises(from session: WorkoutSession) -> [Exercise] {
+        // We trust the sets orderIndex to keep exercises sorted
+        let sortedSets = session.sets.sorted { $0.orderIndex < $1.orderIndex }
+        var unique: [Exercise] = []
+        for set in sortedSets {
+            if let exercise = set.exercise {
+                if !unique.contains(where: { $0.id == exercise.id }) {
+                    unique.append(exercise)
+                }
+            }
+        }
+        return unique
+    }
+    
+    private func getSets(for exercise: Exercise, in session: WorkoutSession) -> [WorkoutSet] {
+        session.sets
+            .filter { $0.exercise == exercise }
+            .sorted { $0.orderIndex < $1.orderIndex }
+    }
+    
+    private func toggleCollapse(for exercise: Exercise) {
+        withAnimation {
+            if collapsedExercises.contains(exercise.id) {
+                collapsedExercises.remove(exercise.id)
+            } else {
+                collapsedExercises.insert(exercise.id)
+            }
+        }
+    }
+    
+    private func deleteSets(at offsets: IndexSet, from sets: [WorkoutSet]) {
+        for index in offsets {
+            let setToDelete = sets[index]
+            viewModel.deleteSet(setToDelete)
+        }
+    }
+    
+    // MARK: - REORDER LOGIC
+    private func moveExercise(_ exercise: Exercise, direction: Int) {
+        guard let session = viewModel.currentSession else { return }
+        
+        // 1. Get Current Order
+        var currentOrder = getExercises(from: session)
+        
+        // 2. Find indices
+        guard let currentIndex = currentOrder.firstIndex(of: exercise) else { return }
+        let newIndex = currentIndex + direction
+        
+        // 3. Safety Check
+        guard newIndex >= 0 && newIndex < currentOrder.count else { return }
+        
+        // 4. Perform the swap
+        withAnimation {
+            currentOrder.swapAt(currentIndex, newIndex)
+            
+            // 5. Update Database Order
+            // We re-assign 'orderIndex' for ALL sets based on the new exercise order
+            var globalSetIndex = 0
+            
+            for ex in currentOrder {
+                // Get sets for this exercise, maintain their internal order
+                let setsForExercise = getSets(for: ex, in: session)
+                
+                for set in setsForExercise {
+                    set.orderIndex = globalSetIndex
+                    globalSetIndex += 1
+                }
+            }
+        }
+    }
 }
 
-// MARK: - Subviews (Refactored to fix compiler timeout)
+// MARK: - Subviews
 
 struct WorkoutHeaderView: View {
     let elapsedSeconds: Int
@@ -97,10 +237,14 @@ struct WorkoutHeaderView: View {
         HStack {
             VStack(alignment: .leading) {
                 Text("Current Session")
-                    .font(.headline)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+                
                 Text(formatTime(elapsedSeconds))
                     .font(.largeTitle)
                     .monospacedDigit()
+                    .fontWeight(.bold)
             }
             Spacer()
             
@@ -108,10 +252,11 @@ struct WorkoutHeaderView: View {
                 onFinish()
             }
             .buttonStyle(.borderedProminent)
-            .tint(.red)
+            .tint(.green) // Green implies "Done/Save"
+            .fontWeight(.bold)
         }
         .padding()
-        .background(Color(uiColor: .systemBackground)) // Solid background for sticky feel
+        .background(Color(uiColor: .systemBackground))
     }
     
     private func formatTime(_ totalSeconds: Int) -> String {
@@ -121,96 +266,85 @@ struct WorkoutHeaderView: View {
     }
 }
 
-struct WorkoutSessionListView: View {
+struct WorkoutSectionHeader: View {
+    let exercise: Exercise
     let session: WorkoutSession
-    var viewModel: ActiveWorkoutViewModel
-    @Binding var showExerciseList: Bool
+    let isCollapsed: Bool
+    let onToggleCollapse: () -> Void
     
-    var body: some View {
-        List {
-            let activeExercises = getExercises(from: session)
-            
-            // FIX: Added 'id: \.self' to prevent the generic Range<Int> error
-            ForEach(activeExercises, id: \.self) { exercise in
-                
-                // 1. Find sets for this exercise
-                let relevantSets = session.sets
-                    .filter { $0.exercise == exercise }
-                    .sorted { $0.orderIndex < $1.orderIndex }
-                
-                // 2. Check if there is an AI Note attached to the routine item
-                let aiNote = relevantSets.first?.routineItem?.note
-                
-                Section(header:
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(exercise.name)
-                            .font(.title3)
-                            .bold()
-                            .foregroundStyle(.primary)
-                    
-                        // 3. Display the Note if it exists
-                        if let note = aiNote, !note.isEmpty {
-                            HStack(spacing: 4) {
-                                Image(systemName: "wand.and.stars")
-                                    .font(.caption2)
-                                Text(note)
-                                    .font(.caption)
-                                    .fontWeight(.medium)
-                            }
-                            .foregroundStyle(.blue)
-                            .textCase(nil) // Prevents iOS from forcing UPPERCASE
-                        }
-                    }
-                    .padding(.vertical, 4)
-                ) {
-                    // FIX: Added 'id: \.self' here too for safety
-                    ForEach(relevantSets, id: \.self) { set in
-                        let index = (relevantSets.firstIndex(of: set) ?? 0) + 1
-                        
-                        if exercise.type == "Cardio" {
-                            CardioSetRowView(set: set, index: index)
-                        } else {
-                            SetRowView(set: set, index: index) {
-                                viewModel.startRestTimer()
-                            }
-                        }
-                    }
-                    .onDelete { indexSet in
-                        for index in indexSet {
-                            let setToDelete = relevantSets[index]
-                            viewModel.deleteSet(setToDelete)
-                        }
-                    }
-                    
-                    Button("Add Set") {
-                        HapticManager.shared.impact(style: .light)
-                        viewModel.addSet(to: exercise, weight: 0, reps: 0)
-                    }
-                }
-            }
-            
-            Button(action: {
-                showExerciseList = true
-            }) {
-                Label("Add Exercise", systemImage: "plus")
-                    .frame(maxWidth: .infinity)
-                    .padding()
-            }
-        }
+    // Reorder callbacks
+    let onMoveUp: () -> Void
+    let onMoveDown: () -> Void
+    
+    // Helper to find the AI Note
+    private var aiNote: String? {
+        session.sets
+            .first(where: { $0.exercise == exercise && $0.routineItem?.note != nil })?
+            .routineItem?.note
     }
     
-    private func getExercises(from session: WorkoutSession) -> [Exercise] {
-        let sortedSets = session.sets.sorted { $0.orderIndex < $1.orderIndex }
-        
-        var unique: [Exercise] = []
-        for set in sortedSets {
-            if let exercise = set.exercise {
-                // Ensure we haven't already added this exercise
-                if !unique.contains(where: { $0.id == exercise.id }) {
-                    unique.append(exercise)
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(exercise.name)
+                    .font(.title3)
+                    .bold()
+                    .foregroundStyle(.primary)
+                    .textCase(nil)
+                
+                Spacer()
+                
+                // REORDER BUTTONS
+                HStack(spacing: 0) {
+                    Button(action: onMoveUp) {
+                        Image(systemName: "arrow.up")
+                            .font(.caption.bold())
+                            .padding(8)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    
+                    Button(action: onMoveDown) {
+                        Image(systemName: "arrow.down")
+                            .font(.caption.bold())
+                            .padding(8)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
+                .foregroundStyle(.secondary)
+                .padding(.trailing, 4)
+                
+                // COLLAPSE BUTTON
+                Button(action: onToggleCollapse) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.blue)
+                        .rotationEffect(.degrees(isCollapsed ? 0 : 90))
+                        .padding(8)
+                        .background(Color.blue.opacity(0.1))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+            }
+            
+            // AI NOTE
+            if let note = aiNote, !note.isEmpty {
+                HStack(spacing: 6) {
+                    Image(systemName: "wand.and.stars")
+                        .font(.caption2)
+                    Text(note)
+                        .font(.caption)
+                        .fontWeight(.medium)
+                }
+                .foregroundStyle(.purple)
+                .textCase(nil)
+                .padding(.vertical, 4)
+                .padding(.horizontal, 8)
+                .background(Color.purple.opacity(0.1))
+                .cornerRadius(6)
             }
         }
-        return unique
+        .padding(.vertical, 4)
     }
 }

@@ -20,6 +20,8 @@
 		155E6CC92F0F363100698DE1 /* DoggoWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 155E6CB32F0F362F00698DE1 /* DoggoWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		155E6CD02F0F376900698DE1 /* DoggoActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 155E6CCF2F0F375B00698DE1 /* DoggoActivityAttributes.swift */; };
 		155E6CD12F0F377200698DE1 /* DoggoActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 155E6CCF2F0F375B00698DE1 /* DoggoActivityAttributes.swift */; };
+		1561DE812F1AD3F90018DBDB /* ExerciseAnalyticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1561DE802F1AD3F70018DBDB /* ExerciseAnalyticsView.swift */; };
+		1561DE832F1AE6EA0018DBDB /* WeeklyPlannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1561DE822F1AE6E50018DBDB /* WeeklyPlannerView.swift */; };
 		15E5BFAB2F0C2980006A00E4 /* DoggoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15E5BFA92F0C2980006A00E4 /* DoggoApp.swift */; };
 		15E5BFAC2F0C2980006A00E4 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15E5BFA82F0C2980006A00E4 /* ContentView.swift */; };
 		15E5BFCE2F0C2990006A00E4 /* ExerciseListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15E5BFC02F0C2990006A00E4 /* ExerciseListView.swift */; };
@@ -105,6 +107,8 @@
 		155E6CB52F0F362F00698DE1 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		155E6CB72F0F362F00698DE1 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		155E6CCF2F0F375B00698DE1 /* DoggoActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoggoActivityAttributes.swift; sourceTree = "<group>"; };
+		1561DE802F1AD3F70018DBDB /* ExerciseAnalyticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExerciseAnalyticsView.swift; sourceTree = "<group>"; };
+		1561DE822F1AE6E50018DBDB /* WeeklyPlannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeeklyPlannerView.swift; sourceTree = "<group>"; };
 		1597D06C2F0C0C6200F76CD0 /* Doggo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Doggo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1597D07B2F0C0C6400F76CD0 /* DoggoTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DoggoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1597D0852F0C0C6400F76CD0 /* DoggoUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DoggoUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -315,6 +319,7 @@
 		15E5BFBE2F0C2990006A00E4 /* Dashboard */ = {
 			isa = PBXGroup;
 			children = (
+				1561DE822F1AE6E50018DBDB /* WeeklyPlannerView.swift */,
 				15E5BFBC2F0C2990006A00E4 /* DashboardView.swift */,
 				15E5BFBD2F0C2990006A00E4 /* DashboardViewModel.swift */,
 			);
@@ -334,6 +339,7 @@
 		15E5BFC42F0C2990006A00E4 /* History */ = {
 			isa = PBXGroup;
 			children = (
+				1561DE802F1AD3F70018DBDB /* ExerciseAnalyticsView.swift */,
 				15E5BFC22F0C2990006A00E4 /* HistoryView.swift */,
 				15E5BFC32F0C2990006A00E4 /* WorkoutDetailView.swift */,
 			);
@@ -592,6 +598,7 @@
 			files = (
 				15E5BFFE2F0C5C51006A00E4 /* View+Theme.swift in Sources */,
 				15E5BFAB2F0C2980006A00E4 /* DoggoApp.swift in Sources */,
+				1561DE832F1AE6EA0018DBDB /* WeeklyPlannerView.swift in Sources */,
 				15E5BFF62F0C5296006A00E4 /* RoutineItem.swift in Sources */,
 				15E5BFCE2F0C2990006A00E4 /* ExerciseListView.swift in Sources */,
 				15E5BFFA2F0C5A0E006A00E4 /* ExerciseDetailView.swift in Sources */,
@@ -603,6 +610,7 @@
 				15E5BFD22F0C2990006A00E4 /* WorkoutSet.swift in Sources */,
 				15E5BFD32F0C2990006A00E4 /* Exercise.swift in Sources */,
 				15E5BFD42F0C2990006A00E4 /* SetRowView.swift in Sources */,
+				1561DE812F1AD3F90018DBDB /* ExerciseAnalyticsView.swift in Sources */,
 				1523B0742F16D32400A76B87 /* RoutineGeneratorView.swift in Sources */,
 				1523B0782F17D0D700A76B87 /* UserProfile.swift in Sources */,
 				1523B0722F16BC6900A76B87 /* CoachView.swift in Sources */,

@@ -4,157 +4,147 @@ class GeminiManager {
     // YOUR WORKING KEY
     private let apiKey = ""
     
-    // Gemini 2.0 Flash
-    // Updated to use the high-limit "Lite" model (4,000 RPM)
-    // Switch to the Advanced "Pro" model for smarter reasoning
-        private let urlString = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent"
+    // Gemini 2.0 Flash (High Rate Limit)
+    private let urlString = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent"
     
-    // MARK: - 1. Coach's Report (Updated with Profile)
+    // MARK: - 1. Coach's Report
     func generateAnalysis(from sessions: [WorkoutSession], profile: UserProfile?) async throws -> String {
-        print("--- DEBUG: Starting AI Request (Gemini 2.0) ---")
+        print("--- DEBUG: Starting AI Analysis ---")
         
-        // --- STEP 1: PREPARE DATA ---
-        let recentHistory = sessions.prefix(15)
-        var contextString = "Here is my recent workout history:\n"
-        
-        if recentHistory.isEmpty {
-            return "No workout history found. Log a workout to get coaching advice!"
-        }
+        let stats = calculateStats(from: sessions)
+        let recentHistory = sessions.sorted { $0.date > $1.date }.prefix(10)
+        var historyString = ""
         
         for session in recentHistory {
             let date = session.date.formatted(date: .numeric, time: .omitted)
-            contextString += "- Date: \(date), Routine: \(session.name), Duration: \(Int(session.duration/60)) mins\n"
+            historyString += "- \(date): \(session.name) (\(Int(session.duration/60)) min)\n"
             
-            for set in session.sets {
-                if let exercise = set.exercise {
-                    if exercise.type == "Cardio" {
-                        contextString += "  * \(exercise.name): \(set.distance ?? 0) \(set.unit) in \(set.duration ?? 0) mins\n"
-                    } else {
-                        contextString += "  * \(exercise.name): \(Int(set.weight)) \(set.unit) x \(set.reps) reps\n"
-                    }
+            let sortedSets = session.sets.sorted { $0.orderIndex < $1.orderIndex }
+            let heavySets = sortedSets.filter { $0.weight > 0 }.prefix(8)
+            
+            for set in heavySets {
+                if let name = set.exercise?.name {
+                    historyString += "  * \(name): \(Int(set.weight)) \(set.unit) x \(set.reps)\n"
                 }
             }
         }
         
-        // --- STEP 2: PREPARE USER CONTEXT ---
-        var userContext = ""
+        var userContext = "User Profile: Unknown"
         if let p = profile {
-            userContext = p.aiDescription + "\n\n"
+            userContext = """
+            User Profile:
+            - Goal: \(p.fitnessGoal) 
+            - Experience: \(p.experienceLevel)
+            """
         }
         
-        // --- STEP 3: THE PROMPT ---
         let prompt = """
-        You are an elite strength and conditioning coach. Analyze the following workout history for a user.
+        You are an elite strength and conditioning coach. Analyze this user's recent training data.
         
         \(userContext)
         
-        Your Goal:
-        1. Identify the user's focus (e.g., "Mainly pushing", "Skipping legs").
-        2. Spot any plateaus or consistency issues based on their Goal and Level.
-        3. Provide 3 specific, actionable bullet points to improve their progress next week.
+        QUANTITATIVE DATA (Last 30 Days):
+        - Workout Consistency: \(stats.workoutsPerWeek) sessions/week
+        - Avg Session Duration: \(stats.avgDuration)
+        - Muscle Focus Split: \(stats.muscleSplit)
+        - Total Volume: \(stats.totalVolume) lbs
         
-        Keep the tone encouraging but direct. Use Markdown formatting.
+        RECENT ACTIVITY LOG (Newest first):
+        \(historyString)
         
-        \(contextString)
+        YOUR MISSION:
+        1. Compare "Muscle Focus" vs "Goal".
+        2. Analyze Consistency & Duration.
+        3. Check for OVERLAP/RECOVERY issues.
+        4. Provide 3 specific, actionable bullet points for next week (e.g. specific rep ranges, exercises to add/remove).
+        
+        Keep the advice short, punchy, and data-backed. Use Markdown.
         """
         
-        // --- STEP 4: BUILD REQUEST ---
-        guard let url = URL(string: urlString) else { return "Invalid URL" }
-        
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        
-        // Headers
-        request.addValue(apiKey, forHTTPHeaderField: "X-goog-api-key")
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        let body: [String: Any] = [
-            "contents": [
-                [
-                    "parts": [
-                        ["text": prompt]
-                    ]
-                ]
-            ]
-        ]
-        
-        let jsonData = try JSONSerialization.data(withJSONObject: body)
-        request.httpBody = jsonData
-        
-        // --- STEP 5: SEND ---
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
-        if let httpResponse = response as? HTTPURLResponse {
-            if httpResponse.statusCode == 429 {
-                return "⚠️ The Coach is busy right now (Rate Limit Reached). Please wait 1 minute and try again."
-            }
-            if httpResponse.statusCode != 200 {
-                return "Error: Server returned \(httpResponse.statusCode). Please try again later."
-            }
-        }
-        
-        // --- STEP 6: DECODE ---
-        if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            if let candidates = json["candidates"] as? [[String: Any]],
-               let content = candidates.first?["content"] as? [String: Any],
-               let parts = content["parts"] as? [[String: Any]],
-               let text = parts.first?["text"] as? String {
-                return text
-            }
-        }
-        
-        return "Failed to parse Coach's advice."
+        return try await sendRequest(prompt: prompt)
     }
     
-    // MARK: - 2. Routine Generator (Updated with Profile)
+    // MARK: - 2. Routine Generator (Fixed: Removed 'set.time' error)
     func generateRoutine(
         history: [WorkoutSession],
         existingRoutines: [Routine],
         availableExercises: [Exercise],
-        profile: UserProfile?,  // <--- NEW PARAMETER
+        profile: UserProfile?,
         focus: String,
-        duration: Int
+        duration: Int,
+        exerciseCount: Int,
+        includeCardio: Bool,
+        cardioDuration: Int,
+        coachAdvice: String? = nil
     ) async throws -> (name: String, rawJSON: String, items: [AIRoutineItem]) {
         
-        print("--- DEBUG: Starting Smart Routine Generation ---")
+        print("--- DEBUG: Starting Routine Generation ---")
         let exerciseList = availableExercises.map { $0.name }.joined(separator: ", ")
         
-        // 1. Performance Context
-        var performanceContext = ""
-        let recentSessions = history.prefix(20)
-        var maxWeights: [String: Double] = [:]
-        for session in recentSessions {
-            for set in session.sets {
-                guard let name = set.exercise?.name else { continue }
-                if set.weight > (maxWeights[name] ?? 0) { maxWeights[name] = set.weight }
-            }
-        }
-        for (name, weight) in maxWeights {
-            performanceContext += "- \(name): Best recent set was \(Int(weight)) lbs\n"
-        }
-        
-        // 2. User Context
         var userContext = ""
         if let p = profile {
-            userContext = p.aiDescription + "\n\n"
+            userContext = """
+            User Profile:
+            - Goal: \(p.fitnessGoal)
+            - Experience: \(p.experienceLevel)
+            """
         }
         
-        // 3. The Prompt
+        let adviceContext = (coachAdvice != nil && !coachAdvice!.isEmpty) ? "COACH'S STRATEGY: \(coachAdvice!)" : "COACH'S STRATEGY: None."
+        
+        // 1. Analyze Strength Levels
+        var maxWeights: [String: Double] = [:]
+        
+        // 2. Analyze Cardio Preferences
+        var cardioCounts: [String: Int] = [:]
+        
+        for session in history.prefix(30) {
+            for set in session.sets {
+                guard let name = set.exercise?.name else { continue }
+                
+                // Track max weight
+                if set.weight > (maxWeights[name] ?? 0) { maxWeights[name] = set.weight }
+                
+                // FIXED: Only check distance (removed set.time which caused error)
+                if set.distance != nil {
+                    cardioCounts[name, default: 0] += 1
+                }
+            }
+        }
+        
+        let performanceContext = maxWeights.map { "- \($0.key): Best \($0.value) lbs" }.joined(separator: "\n")
+        
+        // Find favorite cardio (defaults to Treadmill if none found)
+        let favoriteCardio = cardioCounts.sorted { $0.value > $1.value }.first?.key ?? "Treadmill"
+        
         let prompt = """
         You are an expert strength coach. Create a custom workout routine menu.
         
         \(userContext)
+        \(adviceContext)
         
         USER REQUEST: Focus: \(focus), Time: \(duration) min.
+        CONSTRAINT: EXACTLY \(exerciseCount) exercises.
+        CARDIO REQUEST: \(includeCardio ? "Yes, include a cardio finisher." : "No cardio.")
+        CARDIO DURATION: \(cardioDuration) min (if applicable).
         
         My Available Exercises: [\(exerciseList)]
-        My Strength Levels: \(performanceContext)
+        
+        My Stats:
+        \(performanceContext)
+        Favorite Cardio: \(favoriteCardio)
         
         INSTRUCTIONS:
-        1. Select exercises matching the focus and my Experience Level/Goal.
-        2. Assign Sets and Reps specific to my Goal (e.g. Lower reps for Strength, Higher for Endurance).
-        3. Calculate a target weight or note.
-        4. Return RAW JSON ONLY.
+        1. Select EXACTLY \(exerciseCount) exercises matching the focus.
+        2. CRITICAL: Apply the 'COACH'S STRATEGY' to the Sets/Reps.
+        3. Use my Strength Levels to suggest specific target weights.
+        4. IF CARDIO IS REQUESTED:
+           - The LAST exercise MUST be a cardio exercise.
+           - Prioritize my "Favorite Cardio" (\(favoriteCardio)) if it fits the goal, otherwise suggest the best option.
+           - Sets: 1
+           - Reps: "\(cardioDuration) min"
+           - Note: Suggest intensity (e.g. "Zone 2" or "HIIT intervals").
+        5. Return RAW JSON ONLY.
         
         JSON Format:
         {
@@ -165,8 +155,108 @@ class GeminiManager {
         }
         """
         
-        // Networking
+        let responseText = try await sendRequest(prompt: prompt)
+        return try parseRoutineJSON(responseText)
+    }
+    
+    // MARK: - 3. Weekly Schedule Generator
+    func generateWeeklySchedule(
+        profile: UserProfile,
+        history: [WorkoutSession],
+        coachAdvice: String
+    ) async throws -> WeeklyPlan {
+        print("--- DEBUG: Starting Schedule Generation ---")
+        
+        var lastWorkoutContext = "No recent workouts."
+        if let last = history.sorted(by: { $0.date > $1.date }).first {
+            lastWorkoutContext = "Last workout was '\(last.name)' on \(last.date.formatted(date: .abbreviated, time: .omitted))."
+        }
+        
+        let adviceContext = coachAdvice.isEmpty ? "No specific advice yet." : coachAdvice
+        
+        let prompt = """
+        Act as a personal trainer. Create a 7-day workout schedule (Monday to Sunday) for this user.
+        
+        USER PROFILE:
+        - Goal: \(profile.fitnessGoal)
+        - Experience: \(profile.experienceLevel)
+        - PREFERRED SPLIT: \(profile.splitPreference)
+        
+        CONTEXT:
+        - \(lastWorkoutContext)
+        
+        COACH'S RECENT ADVICE:
+        "\(adviceContext)"
+        
+        INSTRUCTIONS:
+        1. Create a plan for the UPCOMING week (Mon-Sun).
+        2. PRIORITIZE THE COACH'S ADVICE.
+        3. Respect the user's Preferred Split, but adjust it to fit the Coach's advice.
+        4. If they just did 'Legs', ensure Monday isn't Legs (recovery).
+        5. For the 'focus' field, USE ONLY STANDARD SPLIT NAMES (e.g. 'Push', 'Pull', 'Legs', 'Upper Body', 'Lower Body', 'Full Body', 'Cardio', 'Rest').
+        6. Return RAW JSON ONLY.
+        
+        JSON Format:
+        {
+            "weekFocus": "Brief 1-sentence focus for the week",
+            "days": [
+                { "day": "Monday", "focus": "Push", "description": "Chest, Shoulders, Triceps" },
+                ... (for all 7 days)
+            ]
+        }
+        """
+        
+        let responseText = try await sendRequest(prompt: prompt)
+        return try parseScheduleJSON(responseText)
+    }
+    
+    // MARK: - Internal Helpers
+    
+    private struct AnalysisStats {
+        let workoutsPerWeek: String
+        let avgDuration: String
+        let muscleSplit: String
+        let totalVolume: String
+    }
+    
+    private func calculateStats(from sessions: [WorkoutSession]) -> AnalysisStats {
+        let oneMonthAgo = Calendar.current.date(byAdding: .day, value: -30, to: Date())!
+        let recentSessions = sessions.filter { $0.date > oneMonthAgo }
+        
+        let freq = String(format: "%.1f", Double(recentSessions.count) / 4.0)
+        
+        let totalSeconds = recentSessions.reduce(0) { $0 + $1.duration }
+        let avgSeconds = recentSessions.isEmpty ? 0 : totalSeconds / Double(recentSessions.count)
+        let avgDur = "\(Int(avgSeconds / 60)) min"
+        
+        var vol: Double = 0
+        var muscleCounts: [String: Int] = [:]
+        
+        for session in recentSessions {
+            for set in session.sets {
+                let w = set.unit == "kg" ? set.weight * 2.2 : set.weight
+                vol += (w * Double(set.reps))
+                
+                if let muscle = set.exercise?.muscleGroup {
+                    muscleCounts[muscle, default: 0] += 1
+                }
+            }
+        }
+        
+        let sortedMuscles = muscleCounts.sorted { $0.value > $1.value }.prefix(3)
+        let splitString = sortedMuscles.map { "\($0.key) (\($0.value) sets)" }.joined(separator: ", ")
+        
+        return AnalysisStats(
+            workoutsPerWeek: freq,
+            avgDuration: avgDur,
+            muscleSplit: splitString.isEmpty ? "General Full Body" : splitString,
+            totalVolume: "\(Int(vol))"
+        )
+    }
+    
+    private func sendRequest(prompt: String) async throws -> String {
         guard let url = URL(string: urlString) else { throw URLError(.badURL) }
+        
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.addValue(apiKey, forHTTPHeaderField: "X-goog-api-key")
@@ -176,50 +266,75 @@ class GeminiManager {
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         
         let (data, response) = try await URLSession.shared.data(for: request)
-        if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode != 200 {
-            throw URLError(.badServerResponse)
+        
+        if let httpResponse = response as? HTTPURLResponse {
+            if httpResponse.statusCode == 429 {
+                return "⚠️ The Coach is busy (Rate Limit). Please try again in a minute."
+            }
+            if httpResponse.statusCode != 200 {
+                throw URLError(.badServerResponse)
+            }
         }
         
-        // Decoding
         if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
            let candidates = json["candidates"] as? [[String: Any]],
            let content = candidates.first?["content"] as? [String: Any],
            let parts = content["parts"] as? [[String: Any]],
-           var text = parts.first?["text"] as? String {
-            
-            // Clean Markdown
-            text = text.replacingOccurrences(of: "```json", with: "")
-            text = text.replacingOccurrences(of: "```", with: "")
-            let rawJSON = text // Save this for History
-            
-            guard let data = text.data(using: .utf8),
-                  let responseObj = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let name = responseObj["routineName"] as? String,
-                  let exercises = responseObj["exercises"] as? [[String: Any]]
-            else { throw URLError(.cannotParseResponse) }
-            
-            // Map to Struct
-            let mappedItems = exercises.compactMap { dict -> AIRoutineItem? in
-                guard let exName = dict["name"] as? String else { return nil }
-                let sets = dict["sets"] as? Int ?? 3
-                let repsVal = dict["reps"]
-                let repsString = "\(repsVal ?? "10")"
-                let note = dict["note"] as? String ?? ""
-                
-                return AIRoutineItem(name: exName, sets: sets, reps: repsString, note: note)
-            }
-            
-            return (name, rawJSON, mappedItems)
+           let text = parts.first?["text"] as? String {
+            return text
         }
         
         throw URLError(.cannotParseResponse)
     }
+    
+    private func parseRoutineJSON(_ text: String) throws -> (String, String, [AIRoutineItem]) {
+        var cleanText = text.replacingOccurrences(of: "```json", with: "")
+        cleanText = cleanText.replacingOccurrences(of: "```", with: "")
+        
+        guard let data = cleanText.data(using: .utf8),
+              let responseObj = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let name = responseObj["routineName"] as? String,
+              let exercises = responseObj["exercises"] as? [[String: Any]]
+        else { throw URLError(.cannotParseResponse) }
+        
+        let mappedItems = exercises.compactMap { dict -> AIRoutineItem? in
+            guard let exName = dict["name"] as? String else { return nil }
+            let sets = dict["sets"] as? Int ?? 3
+            let repsVal = dict["reps"]
+            let repsString = "\(repsVal ?? "10")"
+            let note = dict["note"] as? String ?? ""
+            return AIRoutineItem(name: exName, sets: sets, reps: repsString, note: note)
+        }
+        
+        return (name, cleanText, mappedItems)
+    }
+    
+    private func parseScheduleJSON(_ text: String) throws -> WeeklyPlan {
+        var cleanText = text.replacingOccurrences(of: "```json", with: "")
+        cleanText = cleanText.replacingOccurrences(of: "```", with: "")
+        
+        let data = cleanText.data(using: .utf8)!
+        return try JSONDecoder().decode(WeeklyPlan.self, from: data)
+    }
 }
 
-// Helper Struct
+// MARK: - Shared Structs
+
 struct AIRoutineItem: Codable {
     let name: String
     let sets: Int
     let reps: String
     let note: String
+}
+
+struct WeeklyPlan: Codable {
+    let weekFocus: String
+    let days: [DaySchedule]
+}
+
+struct DaySchedule: Codable, Identifiable {
+    var id: String { day }
+    let day: String
+    let focus: String
+    let description: String
 }

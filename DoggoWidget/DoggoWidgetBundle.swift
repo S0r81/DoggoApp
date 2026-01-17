@@ -5,7 +5,7 @@ import SwiftUI
 struct DoggoWidgetBundle: WidgetBundle {
     var body: some Widget {
         // If you kept the default static widget code, include it here:
-        DoggoWidget()
+        //DoggoWidget()
         
         // Add your new Live Activity here:
         DoggoWidgetLiveActivity()

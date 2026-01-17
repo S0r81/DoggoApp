@@ -13,12 +13,17 @@ struct DashboardView: View {
     @Binding var selectedTab: Int
     @State private var showCoach = false
     @State private var viewModel = DashboardViewModel()
+    @State private var showPlanner = false
     @AppStorage("userTheme") private var userTheme: AppTheme = .light
     @AppStorage("unitSystem") private var unitSystem: UnitSystem = .imperial
     
     // Sheets
-    @State private var showSettings = false // App Settings (Theme/Units)
-    @State private var showProfile = false  // User Profile (Stats/Goals)
+    @State private var showSettings = false
+    @State private var showProfile = false
+    
+    // Tab States for Paging
+    @State private var consistencyPage: Int = 4 // Default to last (current week)
+    @State private var volumePage: Int = 2      // Default to last (current month)
     
     // Fetch History
     @Query(
@@ -27,7 +32,6 @@ struct DashboardView: View {
         order: .reverse
     ) var recentSessions: [WorkoutSession]
     
-    // NEW: Fetch Profile for Greeting & Edit
     @Query var profiles: [UserProfile]
     
     let columns = [GridItem(.flexible()), GridItem(.flexible())]
@@ -40,7 +44,11 @@ struct DashboardView: View {
                     headerView
                     quickActionsView
                     statsGridView
+                    
+                    // SWIPABLE CHARTS
                     weeklyConsistencyView
+                    volumeTrendView
+                    
                     recentBestsView
                     workoutFocusView
                     lastWorkoutView
@@ -48,16 +56,14 @@ struct DashboardView: View {
             }
             .background(Color(uiColor: .systemGroupedBackground))
             
-            // 1. App Settings Sheet
+            // Sheets
             .sheet(isPresented: $showSettings) {
                 AppSettingsView().presentationDetents([.medium])
             }
-            // 2. AI Coach Sheet
             .sheet(isPresented: $showCoach) {
                 CoachView(sessions: recentSessions)
                     .presentationDetents([.medium, .large])
             }
-            // 3. NEW: Profile Settings Sheet
             .sheet(isPresented: $showProfile) {
                 if let user = profiles.first {
                     ProfileSettingsView(profile: user)
@@ -65,10 +71,13 @@ struct DashboardView: View {
                     ContentUnavailableView("Profile Error", systemImage: "exclamationmark.triangle")
                 }
             }
+            // NEW: Planner Sheet
+            .sheet(isPresented: $showPlanner) {
+                WeeklyPlannerView()
+            }
             .navigationTitle("Dashboard")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                // Moved App Settings to Toolbar (Gear Icon)
                 ToolbarItem(placement: .primaryAction) {
                     Button(action: { showSettings = true }) {
                         Image(systemName: "gearshape")
@@ -83,7 +92,6 @@ struct DashboardView: View {
     private var headerView: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
-                // NEW: Dynamic Greeting
                 if let name = profiles.first?.name {
                     Text("\(viewModel.greetingMessage), \(name)".uppercased())
                         .font(.caption).fontWeight(.bold).foregroundStyle(.secondary)
@@ -97,11 +105,10 @@ struct DashboardView: View {
             }
             Spacer()
             
-            // UPDATED: Tapping the Avatar opens Profile Settings
             Button(action: { showProfile = true }) {
                 Image(systemName: "person.crop.circle")
-                    .font(.system(size: 40)) // Slightly larger
-                    .foregroundStyle(Color.accentColor) // Active color
+                    .font(.system(size: 40))
+                    .foregroundStyle(Color.accentColor)
             }
         }
         .padding(.horizontal)
@@ -119,9 +126,13 @@ struct DashboardView: View {
                         QuickActionButton(title: "New Routine", icon: "list.bullet.clipboard", color: .purple)
                     }
                     
-                    // Triggers the Coach
                     Button(action: { showCoach = true }) {
                         QuickActionButton(title: "AI Coach", icon: "brain.head.profile", color: .orange)
+                    }
+                    
+                    // NEW: Planner Button
+                    Button(action: { showPlanner = true }) {
+                        QuickActionButton(title: "Plan Week", icon: "calendar.badge.clock", color: .teal)
                     }
                 }
                 .padding(.horizontal)
@@ -138,22 +149,123 @@ struct DashboardView: View {
         .padding(.horizontal)
     }
     
+    // MARK: - PAGED Consistency Chart (No Dots)
     private var weeklyConsistencyView: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Consistency").font(.headline).padding(.horizontal)
-            Chart {
-                ForEach(viewModel.getWeeklyActivity(from: recentSessions)) { day in
-                    BarMark(x: .value("Day", day.day), y: .value("Workouts", day.count))
-                        .foregroundStyle(LinearGradient(colors: day.count > 0 ? [.blue, .purple] : [.gray.opacity(0.2)], startPoint: .bottom, endPoint: .top))
-                        .cornerRadius(6)
-                }
+            HStack {
+                Text("Consistency").font(.headline)
+                Spacer()
             }
-            .chartYAxis(.hidden)
-            .frame(height: 140)
-            .padding()
-            .background(Color(uiColor: .secondarySystemBackground))
-            .cornerRadius(16)
             .padding(.horizontal)
+            
+            let pages = viewModel.getConsistencyPages(from: recentSessions)
+            
+            if pages.isEmpty {
+                ContentUnavailableView("No Data", systemImage: "chart.bar")
+            } else {
+                TabView(selection: $consistencyPage) {
+                    ForEach(Array(pages.enumerated()), id: \.offset) { index, page in
+                        VStack(alignment: .leading) {
+                            Text(page.label)
+                                .font(.caption).bold()
+                                .foregroundStyle(.secondary)
+                                .padding(.bottom, 8)
+                            
+                            Chart {
+                                ForEach(page.days) { day in
+                                    BarMark(
+                                        x: .value("Day", day.day),
+                                        y: .value("Workouts", day.count)
+                                    )
+                                    .foregroundStyle(LinearGradient(colors: day.count > 0 ? [.blue, .purple] : [.gray.opacity(0.2)], startPoint: .bottom, endPoint: .top))
+                                    .cornerRadius(6)
+                                }
+                            }
+                            .chartYAxis(.hidden)
+                        }
+                        .padding()
+                        .tag(index) // Important for selection
+                    }
+                }
+                // FIXED: Hides the "Pill/Dots" indicator
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                .frame(height: 160) // Reduced height since we removed the dots area
+                .background(Color(uiColor: .secondarySystemBackground))
+                .cornerRadius(16)
+                .padding(.horizontal)
+            }
+        }
+    }
+    
+    // MARK: - PAGED Volume Chart (No Dots)
+    private var volumeTrendView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: "chart.line.uptrend.xyaxis")
+                    .foregroundStyle(.green)
+                Text("Volume Trend")
+                    .font(.headline)
+            }
+            .padding(.horizontal)
+            
+            let pages = viewModel.getVolumePages(from: recentSessions)
+            
+            if pages.isEmpty {
+                ContentUnavailableView("No Data", systemImage: "chart.bar")
+                    .frame(height: 150)
+            } else {
+                TabView(selection: $volumePage) {
+                    ForEach(Array(pages.enumerated()), id: \.offset) { index, page in
+                        VStack(alignment: .leading) {
+                            Text(page.label)
+                                .font(.caption).bold()
+                                .foregroundStyle(.secondary)
+                                .padding(.bottom, 8)
+                            
+                            Chart {
+                                ForEach(page.weeks) { item in
+                                    LineMark(
+                                        x: .value("Week", item.weekLabel),
+                                        y: .value("Volume", item.volume)
+                                    )
+                                    .interpolationMethod(.catmullRom) // Smooth curves
+                                    .symbol(Circle())
+                                    .foregroundStyle(Color.green)
+                                    
+                                    AreaMark(
+                                        x: .value("Week", item.weekLabel),
+                                        y: .value("Volume", item.volume)
+                                    )
+                                    .foregroundStyle(
+                                        LinearGradient(
+                                            colors: [.green.opacity(0.3), .clear],
+                                            startPoint: .top,
+                                            endPoint: .bottom
+                                        )
+                                    )
+                                }
+                            }
+                            .chartYAxis {
+                                AxisMarks(position: .leading) { value in
+                                    AxisValueLabel {
+                                        if let vol = value.as(Double.self) {
+                                            Text("\(Int(vol / 1000))k")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        .padding()
+                        .tag(index)
+                    }
+                }
+                // FIXED: Hides the "Pill/Dots" indicator
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                .frame(height: 200)
+                .background(Color(uiColor: .secondarySystemBackground))
+                .cornerRadius(16)
+                .padding(.horizontal)
+            }
         }
     }
     
@@ -166,20 +278,25 @@ struct DashboardView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 16) {
                         ForEach(viewModel.getRecentBests(from: recentSessions)) { best in
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack {
-                                    Image(systemName: "trophy.fill").foregroundStyle(.yellow)
-                                    Text(best.exerciseName).font(.subheadline).bold().lineLimit(1)
+                            if let exercise = best.exercise {
+                                NavigationLink(destination: ExerciseAnalyticsView(exercise: exercise)) {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        HStack {
+                                            Image(systemName: "trophy.fill").foregroundStyle(.yellow)
+                                            Text(best.exerciseName).font(.subheadline).bold().lineLimit(1)
+                                        }
+                                        Text("\(Int(best.weight)) \(best.unit)")
+                                            .font(.title2).bold().monospacedDigit()
+                                        Text(best.date.formatted(date: .abbreviated, time: .omitted))
+                                            .font(.caption).foregroundStyle(.secondary)
+                                    }
+                                    .padding()
+                                    .frame(width: 160)
+                                    .background(Color(uiColor: .secondarySystemBackground))
+                                    .cornerRadius(16)
                                 }
-                                Text("\(Int(best.weight)) \(best.unit)")
-                                    .font(.title2).bold().monospacedDigit()
-                                Text(best.date.formatted(date: .abbreviated, time: .omitted))
-                                    .font(.caption).foregroundStyle(.secondary)
+                                .buttonStyle(.plain)
                             }
-                            .padding()
-                            .frame(width: 160)
-                            .background(Color(uiColor: .secondarySystemBackground))
-                            .cornerRadius(16)
                         }
                     }
                     .padding(.horizontal)
@@ -189,55 +306,7 @@ struct DashboardView: View {
     }
     
     private var workoutFocusView: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Workout Focus").font(.headline).padding(.horizontal)
-            
-            let data = viewModel.getTopExercises(from: recentSessions)
-            let totalSets = data.reduce(0) { $0 + $1.count }
-            
-            // Defines a simple color cycle for the legend to loosely match the chart
-            let colors: [Color] = [.blue, .green, .orange, .purple, .pink]
-            
-            HStack(spacing: 20) {
-                Chart(data) { item in
-                    SectorMark(
-                        angle: .value("Count", item.count),
-                        innerRadius: .ratio(0.65),
-                        angularInset: 2
-                    )
-                    .cornerRadius(5) // FIX 1: CornerRadius must be BEFORE foregroundStyle
-                    .foregroundStyle(by: .value("Name", item.name))
-                }
-                .chartLegend(.hidden)
-                .chartBackground { proxy in
-                    VStack(spacing: 0) {
-                        Text("\(totalSets)").font(.title2).bold().foregroundStyle(.primary)
-                        Text("Sets").font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                .frame(width: 140, height: 140)
-                
-                // Legend
-                VStack(alignment: .leading, spacing: 10) {
-                    // We use Array(zip) to get index for color matching
-                    ForEach(Array(data.prefix(4).enumerated()), id: \.offset) { index, item in
-                        HStack {
-                            Circle()
-                                // FIX 2: Use a standard Color, not .value(...)
-                                .foregroundStyle(colors[index % colors.count])
-                                .frame(width: 8, height: 8)
-                            Text(item.name).font(.system(size: 14, weight: .medium)).lineLimit(1)
-                            Spacer()
-                            Text("\(item.count)").font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            }
-            .padding()
-            .background(Color(uiColor: .secondarySystemBackground))
-            .cornerRadius(16)
-            .padding(.horizontal)
-        }
+        WorkoutFocusCard(data: viewModel.getTopExercises(from: recentSessions))
     }
     
     private var lastWorkoutView: some View {
@@ -263,13 +332,150 @@ struct DashboardView: View {
     }
 }
 
-// MARK: - Components
+// MARK: - Interactive Workout Focus Card
+struct WorkoutFocusCard: View {
+    let data: [ExerciseStat]
+    @State private var selectedSegment: String? = nil
+    private let colors: [Color] = [.blue, .green, .orange, .purple, .pink]
+    
+    private var totalSets: Int {
+        data.reduce(0) { $0 + $1.count }
+    }
+    
+    private func color(for exerciseName: String) -> Color {
+        if let index = data.firstIndex(where: { $0.name == exerciseName }) {
+            return colors[index % colors.count]
+        }
+        return .gray
+    }
+    
+    private var selectedStat: ExerciseStat? {
+        guard let name = selectedSegment else { return nil }
+        return data.first { $0.name == name }
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Workout Focus").font(.headline).padding(.horizontal)
+            
+            VStack(spacing: 8) {
+                if let stat = selectedStat {
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(color(for: stat.name))
+                            .frame(width: 10, height: 10)
+                        Text(stat.name)
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .lineLimit(1)
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                } else {
+                    Text("Tap a segment")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                
+                Chart(data) { item in
+                    SectorMark(
+                        angle: .value("Count", item.count),
+                        innerRadius: .ratio(0.65),
+                        angularInset: 2
+                    )
+                    .cornerRadius(5)
+                    .foregroundStyle(by: .value("Name", item.name))
+                    .opacity(selectedSegment == nil || selectedSegment == item.name ? 1.0 : 0.4)
+                }
+                .chartLegend(.hidden)
+                .chartBackground { proxy in
+                    VStack(spacing: 2) {
+                        if let stat = selectedStat {
+                            Text("\(stat.count)")
+                                .font(.title)
+                                .bold()
+                                .foregroundStyle(color(for: stat.name))
+                            Text("sets")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("\(totalSets)")
+                                .font(.title)
+                                .bold()
+                                .foregroundStyle(.primary)
+                            Text("Total Sets")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .frame(width: 180, height: 180)
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle()
+                            .fill(Color.clear)
+                            .contentShape(Rectangle())
+                            .onTapGesture { location in
+                                handleTap(at: location, in: geometry.size)
+                            }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding()
+            .background(Color(uiColor: .secondarySystemBackground))
+            .cornerRadius(16)
+            .padding(.horizontal)
+            .animation(.easeInOut(duration: 0.2), value: selectedSegment)
+        }
+    }
+    
+    private func handleTap(at location: CGPoint, in size: CGSize) {
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        let dx = location.x - center.x
+        let dy = location.y - center.y
+        let distance = sqrt(dx * dx + dy * dy)
+        let outerRadius = min(size.width, size.height) / 2
+        let innerRadius = outerRadius * 0.65
+        
+        guard distance >= innerRadius && distance <= outerRadius else {
+            withAnimation {
+                selectedSegment = nil
+            }
+            return
+        }
+        
+        var angle = atan2(dx, -dy)
+        if angle < 0 {
+            angle += 2 * .pi
+        }
+        let tapPercentage = angle / (2 * .pi)
+        
+        var cumulativePercentage: Double = 0
+        let total = Double(totalSets)
+        
+        for item in data {
+            let segmentPercentage = Double(item.count) / total
+            if tapPercentage >= cumulativePercentage && tapPercentage < cumulativePercentage + segmentPercentage {
+                withAnimation {
+                    if selectedSegment == item.name {
+                        selectedSegment = nil
+                    } else {
+                        selectedSegment = item.name
+                    }
+                }
+                return
+            }
+            cumulativePercentage += segmentPercentage
+        }
+    }
+}
+
+// MARK: - Components (Keeping existing ones)
 
 struct QuickActionButton: View {
     let title: String
     let icon: String
     let color: Color
-    
     var body: some View {
         HStack {
             Image(systemName: icon)
@@ -285,7 +491,6 @@ struct QuickActionButton: View {
 
 struct LastWorkoutHero: View {
     let session: WorkoutSession
-    
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
@@ -395,7 +600,7 @@ struct AppSettingsView: View {
                 }
                 
                 Section {
-                    Text("Doggo App v1.0")
+                    Text("Doggo App v1.5")
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .center)
                 }
@@ -436,29 +641,5 @@ struct StatCard: View {
         .background(Color(uiColor: .secondarySystemBackground))
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 2)
-    }
-}
-
-struct RecentWorkoutRow: View {
-    let session: WorkoutSession
-    
-    var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(session.name)
-                    .font(.headline)
-                    .foregroundStyle(.primary)
-                Text(session.date.formatted(date: .abbreviated, time: .shortened))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Image(systemName: "chevron.right")
-                .foregroundStyle(.secondary)
-        }
-        .padding()
-        .background(Color(uiColor: .secondarySystemBackground))
-        .cornerRadius(12)
-        .padding(.horizontal)
     }
 }

@@ -10,11 +10,8 @@ import SwiftData
 
 struct ProfileSettingsView: View {
     @Environment(\.dismiss) var dismiss
-    
-    // We bind directly to the SwiftData model so changes save automatically
     @Bindable var profile: UserProfile
     
-    // Local state for UI inputs (Imperial helpers)
     @State private var weightLbs: Int = 150
     @State private var heightInches: Int = 70
     
@@ -25,7 +22,7 @@ struct ProfileSettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                // MARK: - Avatar / Header
+                // Header (Same as before)
                 Section {
                     HStack {
                         Spacer()
@@ -33,8 +30,7 @@ struct ProfileSettingsView: View {
                             Image(systemName: "person.crop.circle.fill")
                                 .font(.system(size: 80))
                                 .foregroundStyle(.blue)
-                            Text(profile.name)
-                                .font(.title2).bold()
+                            Text(profile.name).font(.title2).bold()
                             Text(profile.experienceLevel)
                                 .font(.caption)
                                 .padding(.horizontal, 8)
@@ -44,61 +40,78 @@ struct ProfileSettingsView: View {
                         }
                         Spacer()
                     }
-                }
-                .listRowBackground(Color.clear)
+                }.listRowBackground(Color.clear)
                 
-                // MARK: - The AI Context (Editable)
-                Section(header: Text("AI Coach Context"), footer: Text("The AI adjusts your routine volume and intensity based on these settings.")) {
-                    
+                // AI Context
+                Section(header: Text("AI Coach Context")) {
                     Picker("Current Goal", selection: $profile.fitnessGoal) {
                         ForEach(goals, id: \.self) { Text($0) }
                     }
-                    
                     Picker("Activity Level", selection: $profile.activityLevel) {
                         ForEach(activities, id: \.self) { Text($0) }
                     }
-                    
                     Picker("Experience", selection: $profile.experienceLevel) {
                         ForEach(levels, id: \.self) { Text($0) }
                     }
                 }
                 
-                // MARK: - Physical Stats
+                // NEW: AI Integration Section
+                Section(header: Text("Coach Integration"), footer: Text("When enabled, the AI will use your recent Coach Reports to adjust your weekly schedule and workout sets/reps.")) {
+                    Toggle(isOn: $profile.useCoachForSchedule) {
+                        Label("Optimize Weekly Planner", systemImage: "calendar")
+                    }
+                    Toggle(isOn: $profile.useCoachForRoutine) {
+                        Label("Optimize Workouts", systemImage: "dumbbell")
+                    }
+                }
+                
+                // Split Strategy
+                Section(header: Text("Training Strategy")) {
+                    Picker("Preferred Split", selection: Binding(
+                        get: { WorkoutSplit(rawValue: profile.splitPreference) ?? .flexible },
+                        set: { profile.splitPreference = $0.rawValue }
+                    )) {
+                        ForEach(WorkoutSplit.allCases, id: \.self) { split in
+                            Text(split.rawValue).tag(split)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    
+                    VStack(alignment: .leading, spacing: 12) {
+                        let currentSplit = WorkoutSplit(rawValue: profile.splitPreference) ?? .flexible
+                        Text(currentSplit.description).font(.subheadline).foregroundStyle(.secondary).padding(.bottom, 4)
+                        Divider()
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("WHY IT WORKS:").font(.caption).bold().foregroundStyle(.green)
+                            Text(currentSplit.pros).font(.caption)
+                        }
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("CONSIDERATIONS:").font(.caption).bold().foregroundStyle(.orange)
+                            Text(currentSplit.cons).font(.caption)
+                        }
+                    }.padding(.vertical, 8)
+                }
+                
+                // Physical Stats
                 Section("Physical Stats") {
                     Stepper("Age: \(profile.age)", value: $profile.age, in: 12...100)
-                    
-                    // Weight Input (Converts Lbs -> KG)
                     HStack {
                         Text("Weight (lbs)")
                         Spacer()
-                        TextField("Lbs", value: $weightLbs, format: .number)
-                            .keyboardType(.numberPad)
-                            .multilineTextAlignment(.trailing)
-                            .onChange(of: weightLbs) { _, newValue in
-                                profile.weightKG = Double(newValue) * 0.453592
-                            }
+                        TextField("Lbs", value: $weightLbs, format: .number).keyboardType(.numberPad).multilineTextAlignment(.trailing)
+                            .onChange(of: weightLbs) { _, newValue in profile.weightKG = Double(newValue) * 0.453592 }
                     }
-                    
-                    // Height Input (Converts In -> CM)
                     HStack {
                         Text("Height (in)")
                         Spacer()
-                        TextField("Inches", value: $heightInches, format: .number)
-                            .keyboardType(.numberPad)
-                            .multilineTextAlignment(.trailing)
-                            .onChange(of: heightInches) { _, newValue in
-                                profile.heightCM = Double(newValue) * 2.54
-                            }
+                        TextField("Inches", value: $heightInches, format: .number).keyboardType(.numberPad).multilineTextAlignment(.trailing)
+                            .onChange(of: heightInches) { _, newValue in profile.heightCM = Double(newValue) * 2.54 }
                     }
                 }
             }
             .navigationTitle("Profile")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                Button("Done") { dismiss() }
-            }
+            .toolbar { Button("Done") { dismiss() } }
             .onAppear {
-                // Initialize local state from the DB values
                 weightLbs = Int(profile.weightKG * 2.20462)
                 heightInches = Int(profile.heightCM / 2.54)
             }

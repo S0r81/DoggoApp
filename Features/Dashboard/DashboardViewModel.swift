@@ -7,8 +7,9 @@
 
 import Foundation
 import SwiftData
+import SwiftUI
 
-// MARK: - Helper Structs for UI
+// MARK: - Helper Structs
 struct ExerciseStat: Identifiable {
     let id = UUID()
     let name: String
@@ -21,12 +22,39 @@ struct BestLift: Identifiable {
     let weight: Double
     let unit: String
     let date: Date
+    let exercise: Exercise?
+}
+
+struct AnalyticsDataPoint: Identifiable {
+    let id = UUID()
+    let date: Date
+    let value: Double
+}
+
+struct WeeklyVolume: Identifiable {
+    let id = UUID()
+    let weekLabel: String
+    let volume: Double
+    let date: Date
+}
+
+// NEW: Wrapper for Paged Data
+struct WeekPage: Identifiable {
+    let id = UUID()
+    let label: String // "Jan 13 - Jan 19"
+    let days: [DashboardViewModel.DailyCount]
+}
+
+struct VolumePage: Identifiable {
+    let id = UUID()
+    let label: String // "Last 4 Weeks"
+    let weeks: [WeeklyVolume]
 }
 
 @Observable
 class DashboardViewModel {
     
-    // MARK: - Greeting Logic
+    // Greeting
     var greetingMessage: String {
         let hour = Calendar.current.component(.hour, from: Date())
         switch hour {
@@ -36,161 +64,188 @@ class DashboardViewModel {
         }
     }
     
-    // MARK: - Weekly Chart Data Logic
+    // MARK: - Consistency Data (Paged)
     struct DailyCount: Identifiable {
         let id = UUID()
-        let day: String
+        let day: String  // "Mon"
         let count: Int
-        let date: Date // For sorting/checking
+        let date: Date
     }
     
-    func getWeeklyActivity(from sessions: [WorkoutSession]) -> [DailyCount] {
-        var result: [DailyCount] = []
-        let calendar = Calendar.current
+    // Returns an array of Pages (Weeks), strictly Mon-Sun
+    func getConsistencyPages(from sessions: [WorkoutSession]) -> [WeekPage] {
+        var pages: [WeekPage] = []
+        var calendar = Calendar.current
+        calendar.firstWeekday = 2 // Monday
+        
         let today = Date()
         
-        // Get the last 7 days (including today)
-        for i in (0..<7).reversed() {
-            if let date = calendar.date(byAdding: .day, value: -i, to: today) {
-                // Find sessions on this specific date
-                let count = sessions.filter { calendar.isDate($0.date, inSameDayAs: date) }.count
-                
-                // Format day name (e.g., "Mon", "Tue")
-                let formatter = DateFormatter()
-                formatter.dateFormat = "E"
-                let dayName = formatter.string(from: date)
-                
-                result.append(DailyCount(day: dayName, count: count, date: date))
+        // Determine the start of the CURRENT week (Monday)
+        // We use .yearForWeekOfYear to handle year boundaries correctly (e.g. Dec 30 - Jan 5)
+        let components = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: today)
+        guard let currentWeekStart = calendar.date(from: components) else { return [] }
+        
+        // Generate last 5 weeks (Oldest -> Newest)
+        // So the last element is "This Week"
+        for i in (0..<5).reversed() {
+            guard let weekStart = calendar.date(byAdding: .weekOfYear, value: -i, to: currentWeekStart) else { continue }
+            
+            var days: [DailyCount] = []
+            
+            // Build 7 days for this week
+            for j in 0..<7 {
+                if let dayDate = calendar.date(byAdding: .day, value: j, to: weekStart) {
+                    let count = sessions.filter { calendar.isDate($0.date, inSameDayAs: dayDate) }.count
+                    
+                    let formatter = DateFormatter()
+                    formatter.dateFormat = "E"
+                    let name = formatter.string(from: dayDate)
+                    
+                    days.append(DailyCount(day: name, count: count, date: dayDate))
+                }
             }
+            
+            // Create Page Label
+            let endOfWeek = calendar.date(byAdding: .day, value: 6, to: weekStart)!
+            let fmt = DateFormatter()
+            fmt.dateFormat = "MMM d"
+            let label = i == 0 ? "This Week" : "\(fmt.string(from: weekStart)) - \(fmt.string(from: endOfWeek))"
+            
+            pages.append(WeekPage(label: label, days: days))
         }
-        return result
+        return pages
     }
     
-    // MARK: - New Stats Logic
+    // MARK: - Volume Data (Paged)
+    // Returns Pages of 4 weeks each
+    func getVolumePages(from sessions: [WorkoutSession]) -> [VolumePage] {
+        var pages: [VolumePage] = []
+        var calendar = Calendar.current
+        calendar.firstWeekday = 2
+        
+        let today = Date()
+        let components = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: today)
+        guard let currentWeekStart = calendar.date(from: components) else { return [] }
+        
+        // We want 3 pages of 4 weeks = 12 weeks total history
+        // Page 0: Weeks 9-12 ago
+        // Page 1: Weeks 5-8 ago
+        // Page 2: Last 4 weeks (Current)
+        
+        for pageIndex in (0..<3).reversed() {
+            var weeks: [WeeklyVolume] = []
+            
+            // Each page has 4 weeks.
+            // Page 0 (Current) starts at offset 0
+            // Page 1 starts at offset -4
+            // Page 2 starts at offset -8
+            let pageOffset = pageIndex * 4
+            
+            // Inside the page, we go from Oldest (-3) to Newest (0) relative to that block
+            for w in (0..<4).reversed() {
+                let weekOffset = -(pageOffset + w) // e.g. -3, -2, -1, 0 for first page
+                
+                if let weekStart = calendar.date(byAdding: .weekOfYear, value: weekOffset, to: currentWeekStart) {
+                    let weekEnd = calendar.date(byAdding: .day, value: 6, to: weekStart)!
+                    
+                    let weekSessions = sessions.filter {
+                        $0.date >= weekStart && $0.date < calendar.date(byAdding: .day, value: 1, to: weekEnd)!
+                    }
+                    
+                    let vol = getTotalVolumeRaw(from: weekSessions)
+                    let fmt = DateFormatter()
+                    fmt.dateFormat = "MMM d"
+                    
+                    weeks.append(WeeklyVolume(weekLabel: fmt.string(from: weekStart), volume: vol, date: weekStart))
+                }
+            }
+            
+            let label = pageIndex == 0 ? "Last 4 Weeks" : "History"
+            pages.append(VolumePage(label: label, weeks: weeks))
+        }
+        
+        return pages
+    }
+    
+    // ... (Keep existing stats methods: Duration, Streak, Top Exercises, Bests, 1RM) ...
     
     func getTotalDuration(from sessions: [WorkoutSession]) -> String {
-        let totalSeconds = sessions.reduce(0) { $0 + $1.duration }
-        let hours = totalSeconds / 3600
-        return String(format: "%.1f hrs", hours)
+        let total = sessions.reduce(0) { $0 + $1.duration }
+        return String(format: "%.1f hrs", total / 3600)
     }
     
     func getCurrentStreak(from sessions: [WorkoutSession]) -> Int {
-        // 1. Get unique days with workouts, sorted newest to oldest
         let calendar = Calendar.current
         let uniqueDays = Set(sessions.map { calendar.startOfDay(for: $0.date) })
-        let sortedDays = uniqueDays.sorted(by: >)
+        let sorted = uniqueDays.sorted(by: >)
+        guard let last = sorted.first else { return 0 }
         
-        guard let lastWorkoutDay = sortedDays.first else { return 0 }
-        
-        // 2. Check if the streak is still "alive" (workout today or yesterday)
         let today = calendar.startOfDay(for: Date())
-        let yesterday = calendar.date(byAdding: .day, value: -1, to: today)!
+        let yest = calendar.date(byAdding: .day, value: -1, to: today)!
         
-        if lastWorkoutDay != today && lastWorkoutDay != yesterday {
-            return 0
-        }
+        if last != today && last != yest { return 0 }
         
-        // 3. Count backwards
         var streak = 0
-        var checkDate = lastWorkoutDay
-        
-        for day in sortedDays {
-            if calendar.isDate(day, inSameDayAs: checkDate) {
+        var check = last
+        for day in sorted {
+            if calendar.isDate(day, inSameDayAs: check) {
                 streak += 1
-                // Move checkDate back one day
-                checkDate = calendar.date(byAdding: .day, value: -1, to: checkDate)!
-            } else {
-                break
-            }
+                check = calendar.date(byAdding: .day, value: -1, to: check)!
+            } else { break }
         }
-        
         return streak
     }
     
-    // MARK: - Volume Logic (True Unit Support)
     func getTotalVolume(from sessions: [WorkoutSession], preferredUnit: String) -> String {
-        var totalVolume: Double = 0
+        let raw = getTotalVolumeRaw(from: sessions)
+        let val = (preferredUnit == "metric" || preferredUnit == "kg") ? raw * 0.453592 : raw
+        let suffix = (preferredUnit == "metric" || preferredUnit == "kg") ? "kg" : "lbs"
         
-        for session in sessions {
-            for set in session.sets {
-                // Skip cardio
-                guard set.distance == nil else { continue }
-                
-                let weight = set.weight
-                let reps = Double(set.reps)
-                
-                // Normalize to Preferred Unit
-                var normalizedWeight = weight
-                
-                // "imperial" string usually comes from the rawValue of UnitSystem enum.
-                // Depending on how you stored it, checking for "imperial" or "lbs" is safer.
-                // Assuming UnitSystem.imperial.rawValue == "imperial"
-                
-                if preferredUnit == "imperial" || preferredUnit == "lbs" {
-                    // We want LBS. If set is KG, convert.
-                    if set.unit == "kg" { normalizedWeight = weight * 2.20462 }
-                } else {
-                    // We want KG. If set is LBS, convert.
-                    if set.unit == "lbs" { normalizedWeight = weight * 0.453592 }
-                }
-                
-                totalVolume += (normalizedWeight * reps)
-            }
-        }
-        
-        // Format nicely (e.g. "12k lbs")
-        let suffix = (preferredUnit == "imperial" || preferredUnit == "lbs") ? "lbs" : "kg"
-        
-        if totalVolume > 1000000 {
-             return String(format: "%.1fM %@", totalVolume / 1000000, suffix)
-        } else if totalVolume > 1000 {
-            return String(format: "%.1fk %@", totalVolume / 1000, suffix)
-        } else {
-            return "\(Int(totalVolume)) \(suffix)"
-        }
+        if val > 1_000_000 { return String(format: "%.1fM %@", val/1_000_000, suffix) }
+        else if val > 1_000 { return String(format: "%.1fk %@", val/1_000, suffix) }
+        else { return "\(Int(val)) \(suffix)" }
     }
     
-    // MARK: - New: Top Exercises (Donut Chart)
+    private func getTotalVolumeRaw(from sessions: [WorkoutSession]) -> Double {
+        var total: Double = 0
+        for s in sessions {
+            for set in s.sets {
+                guard set.distance == nil else { continue }
+                var w = set.weight
+                if set.unit == "kg" { w *= 2.20462 }
+                total += (w * Double(set.reps))
+            }
+        }
+        return total
+    }
+    
     func getTopExercises(from sessions: [WorkoutSession]) -> [ExerciseStat] {
         var counts: [String: Int] = [:]
-        
-        for session in sessions {
-            for set in session.sets {
-                guard let name = set.exercise?.name else { continue }
-                counts[name, default: 0] += 1
+        for s in sessions {
+            for set in s.sets {
+                if let m = set.exercise?.muscleGroup { counts[m, default: 0] += 1 }
+                else if let n = set.exercise?.name { counts[n, default: 0] += 1 }
             }
         }
-        
-        // Sort by frequency
-        let sorted = counts.map { ExerciseStat(name: $0.key, count: $0.value) }
+        return counts.map { ExerciseStat(name: $0.key, count: $0.value) }
             .sorted { $0.count > $1.count }
-        
-        // Return top 5
-        return Array(sorted.prefix(5))
+            .prefix(5).map { $0 }
     }
     
-    // MARK: - New: Recent Best Lifts (Carousel)
     func getRecentBests(from sessions: [WorkoutSession]) -> [BestLift] {
         var bests: [String: BestLift] = [:]
-        
-        // Look at last 10 sessions to find heavy lifts
-        for session in sessions.prefix(10) {
-            for set in session.sets {
-                guard let name = set.exercise?.name, set.weight > 0 else { continue }
-                
-                // If we haven't seen this exercise yet, or this set is heavier than the stored one
-                if let currentBest = bests[name] {
-                    if set.weight > currentBest.weight {
-                        bests[name] = BestLift(exerciseName: name, weight: set.weight, unit: set.unit, date: session.date)
+        for s in sessions.prefix(15) {
+            for set in s.sets {
+                guard let ex = set.exercise, set.weight > 0 else { continue }
+                if let curr = bests[ex.name] {
+                    if set.weight > curr.weight {
+                        bests[ex.name] = BestLift(exerciseName: ex.name, weight: set.weight, unit: set.unit, date: s.date, exercise: ex)
                     }
                 } else {
-                    bests[name] = BestLift(exerciseName: name, weight: set.weight, unit: set.unit, date: session.date)
+                    bests[ex.name] = BestLift(exerciseName: ex.name, weight: set.weight, unit: set.unit, date: s.date, exercise: ex)
                 }
             }
         }
-        
-        // Return the lifts, sorted by weight descending (just for display purposes)
-        // Taking top 5 heaviest distinct exercises found recently
-        return Array(bests.values.sorted { $0.weight > $1.weight }.prefix(5))
+        return bests.values.sorted { $0.weight > $1.weight }.prefix(5).map { $0 }
     }
 }

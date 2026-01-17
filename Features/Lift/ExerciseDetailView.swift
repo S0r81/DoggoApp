@@ -71,13 +71,14 @@ struct ExerciseDetailView: View {
             VStack(spacing: 24) {
                 // 1. Header Stats
                 HStack(spacing: 20) {
-                    StatBox(
+                    // FIX: Renamed to DetailStatBox to avoid conflict
+                    DetailStatBox(
                         title: personalRecordLabel,
                         value: personalRecordValue,
                         color: .green
                     )
                     
-                    StatBox(
+                    DetailStatBox(
                         title: "Total Sessions",
                         value: "\(history.count)",
                         color: .blue
@@ -185,7 +186,8 @@ struct ExerciseDetailView: View {
     }
 }
 
-struct StatBox: View {
+// FIX: Renamed struct to avoid conflict with the other StatBox
+struct DetailStatBox: View {
     let title: String
     let value: String
     let color: Color

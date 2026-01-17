@@ -17,6 +17,9 @@ class WorkoutSession {
     var isCompleted: Bool
     var startTime: Date?
     
+    // NEW: Session notes for logging how you felt, injuries, etc.
+    var notes: String?
+    
     // Relationship: If you delete a session, delete its sets too
     @Relationship(deleteRule: .cascade) var sets: [WorkoutSet] = []
     
@@ -27,5 +30,6 @@ class WorkoutSession {
         self.duration = 0
         self.isCompleted = false
         self.startTime = nil
+        self.notes = nil
     }
 }
