@@ -22,7 +22,7 @@ struct HistoryContext {
 
 class GeminiManager {
     // YOUR WORKING KEY
-    private let apiKey = "AIzaSyAz5YW_9mbgZ5Ty3TRxHea7G_UOzHbpt_0"
+    private let apiKey = ""
     
     // Gemini 2.0 Flash (High Rate Limit)
     private let urlString = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent"
