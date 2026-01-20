@@ -7,6 +7,7 @@
 
 import Foundation
 import SwiftData
+import SwiftUI // Required for Transferable
 
 @Model
 class Routine {
@@ -23,5 +24,13 @@ class Routine {
         self.id = UUID()
         self.name = name
         self.note = note
+    }
+}
+
+// MARK: - Drag & Drop Support
+extension Routine: Transferable {
+    static var transferRepresentation: some TransferRepresentation {
+        // We export the Routine's ID as a String so the Planner knows which one was dropped
+        ProxyRepresentation(exporting: \.id.uuidString)
     }
 }

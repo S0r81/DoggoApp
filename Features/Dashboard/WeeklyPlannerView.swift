@@ -1,176 +1,379 @@
+//
+//  WeeklyPlannerView.swift
+//  Doggo
+//
+//  Created by Sorest on 1/20/26.
+//
+
 import SwiftUI
 import SwiftData
 
 struct WeeklyPlannerView: View {
     @Environment(\.dismiss) var dismiss
+    @Environment(\.modelContext) var modelContext
     
+    // Fetch User Profile to save the schedule
     @Query var profiles: [UserProfile]
-    @Query(sort: \WorkoutSession.date, order: .reverse) var history: [WorkoutSession]
+    var userProfile: UserProfile? { profiles.first }
     
-    @AppStorage("cachedWeeklyPlanJSON") private var cachedJSON: String = ""
-    @AppStorage("cachedCoachAdvice") private var cachedAdvice: String = ""
+    // Fetch Routines to populate the "Drawer" and for AI context
+    @Query(sort: \Routine.name) var routines: [Routine]
     
-    @State private var currentPlan: WeeklyPlan?
-    @State private var isLoading = false
-    @State private var errorMessage: String?
+    // MARK: - AI State
+    @State private var isGenerating = false
+    @State private var showAIAlert = false
+    private let geminiManager = GeminiManager()
     
-    @State private var splitToGenerate: String?
-    @State private var showGenerator = false
-    
-    private let manager = GeminiManager()
+    let daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 20) {
+            ZStack {
+                // MAIN CONTENT
+                VStack(spacing: 0) {
                     
-                    if isLoading {
-                        loadingView
-                    } else if let plan = currentPlan {
-                        
-                        // Header
-                        VStack(spacing: 8) {
-                            Text("This Week's Focus")
-                                .font(.caption).fontWeight(.bold).foregroundStyle(.secondary).textCase(.uppercase)
-                            Text(plan.weekFocus)
-                                .font(.title3).bold().multilineTextAlignment(.center).foregroundStyle(.primary)
-                        }
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(Color.blue.opacity(0.1))
-                        .cornerRadius(12)
-                        .padding(.horizontal)
-                        
-                        // UI: Show "Adapted" ONLY if feature is ON
-                        if let profile = profiles.first, profile.useCoachForSchedule, !cachedAdvice.isEmpty {
-                            HStack {
-                                Image(systemName: "sparkles")
-                                Text("Adapted from Coach's Strategy")
-                            }
-                            .font(.caption)
-                            .foregroundStyle(.orange)
-                        }
-                        
-                        // Days
+                    // 1. SMART START HEADER (Visible if today has a routine)
+                    if let todayRoutine = getRoutineForToday() {
                         VStack(spacing: 12) {
-                            ForEach(plan.days) { day in
-                                Button {
-                                    handleDayTap(day)
-                                } label: {
-                                    DayScheduleCard(day: day)
-                                }
-                                .buttonStyle(.plain)
+                            Text("TODAY'S MISSION")
+                                .font(.caption).bold()
+                                .foregroundStyle(.white.opacity(0.8))
+                                .tracking(1)
+                            
+                            Text(todayRoutine.name)
+                                .font(.title).bold()
+                                .foregroundStyle(.white)
+                            
+                            Button(action: {
+                                startWorkout(routine: todayRoutine)
+                            }) {
+                                Text("START NOW")
+                                    .font(.headline.bold())
+                                    .foregroundStyle(.blue)
+                                    .padding(.horizontal, 30)
+                                    .padding(.vertical, 12)
+                                    .background(Color.white)
+                                    .clipShape(Capsule())
                             }
                         }
-                        .padding(.horizontal)
-                        
-                        Button(action: { generateSchedule() }) {
-                            Label("Regenerate Schedule", systemImage: "arrow.triangle.2.circlepath")
-                                .frame(maxWidth: .infinity)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 24)
+                        .background(Color.blue.gradient)
+                    }
+                    
+                    // 2. THE WEEKLY GRID (Drop Targets)
+                    List {
+                        Section(header: Text("Your Schedule")) {
+                            ForEach(daysOfWeek, id: \.self) { day in
+                                DayRow(
+                                    day: day,
+                                    assignedRoutine: getRoutine(for: day),
+                                    onRemove: { removeRoutine(from: day) }
+                                )
+                                // THE DROP ZONE
+                                .dropDestination(for: String.self) { items, location in
+                                    guard let routineID = items.first else { return false }
+                                    assignRoutine(routineID, to: day)
+                                    return true
+                                }
+                            }
                         }
-                        .buttonStyle(.bordered)
-                        .padding()
+                    }
+                    .listStyle(.insetGrouped)
+                    
+                    // 3. THE ROUTINE DRAWER (Draggable Source)
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Drag a routine to a day above:")
+                            .font(.caption).bold()
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal)
                         
-                    } else {
-                        ContentUnavailableView("No Schedule Set", systemImage: "calendar.badge.clock", description: Text("Generate a smart 7-day plan based on your preferred split and recent history."))
-                            .padding(.top, 40)
-                        Button("Build My Week", action: { generateSchedule() })
-                            .buttonStyle(.borderedProminent)
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 12) {
+                                if routines.isEmpty {
+                                    ContentUnavailableView("No Routines", systemImage: "dumbbell")
+                                        .frame(width: 200)
+                                } else {
+                                    ForEach(routines) { routine in
+                                        DraggableRoutineCard(routine: routine)
+                                            // MAKE DRAGGABLE
+                                            .draggable(routine.id.uuidString) {
+                                                Text(routine.name)
+                                                    .padding()
+                                                    .background(.blue)
+                                                    .foregroundStyle(.white)
+                                                    .cornerRadius(10)
+                                            }
+                                    }
+                                }
+                            }
+                            .padding(.horizontal)
+                            .padding(.bottom, 20) // Safety spacing for home bar
+                        }
+                        .frame(height: 80)
+                    }
+                    .padding(.top, 16)
+                    .background(Color(uiColor: .systemGroupedBackground))
+                    .shadow(color: .black.opacity(0.05), radius: 5, y: -5)
+                }
+                
+                // 4. LOADING OVERLAY
+                if isGenerating {
+                    Color.black.opacity(0.4).ignoresSafeArea()
+                    VStack(spacing: 20) {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                            .tint(.white)
+                        Text("AI is building your week...")
+                            .font(.headline)
+                            .foregroundStyle(.white)
                     }
                 }
-                .padding(.vertical)
             }
-            .navigationTitle("Weekly Planner")
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
-            .onAppear { loadCachedPlan() }
-            .sheet(isPresented: $showGenerator) {
-                if let focus = splitToGenerate {
-                    RoutineGeneratorView(initialSplit: focus)
+            .navigationTitle("Weekly Plan")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Close") { dismiss() }
+                }
+                
+                // NEW: AI "Magic Wand" Button
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(action: { showAIAlert = true }) {
+                        Image(systemName: "wand.and.stars")
+                    }
+                    .disabled(isGenerating)
                 }
             }
-        }
-    }
-    
-    private var loadingView: some View {
-        VStack(spacing: 16) {
-            ProgressView().scaleEffect(1.5)
-            Text("Building Schedule...")
-                .foregroundStyle(.secondary)
-            if let profile = profiles.first, profile.useCoachForSchedule {
-                Text("Aligning with Coach's advice...")
-                    .font(.caption).foregroundStyle(.tertiary)
+            .alert("Auto-Schedule", isPresented: $showAIAlert) {
+                Button("Generate for Me") { generateSmartSchedule() }
+                Button("Cancel", role: .cancel) { }
+            } message: {
+                Text("AI will analyze your profile and existing routines to create a balanced weekly split. It may create new routines if needed.")
             }
         }
-        .frame(height: 300)
     }
     
-    func handleDayTap(_ day: DaySchedule) {
-        if day.focus.lowercased().contains("rest") { return }
-        self.splitToGenerate = day.focus
-        self.showGenerator = true
+    // MARK: - Manual Logic
+    
+    func getRoutine(for day: String) -> Routine? {
+        guard let idString = userProfile?.weeklySchedule[day],
+              let uuid = UUID(uuidString: idString) else { return nil }
+        return routines.first(where: { $0.id == uuid })
     }
     
-    func generateSchedule() {
-        guard let profile = profiles.first else { return }
-        withAnimation { isLoading = true }
+    func getRoutineForToday() -> Routine? {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE"
+        let dayName = formatter.string(from: Date())
+        return getRoutine(for: dayName)
+    }
+    
+    func assignRoutine(_ routineID: String, to day: String) {
+        withAnimation { userProfile?.weeklySchedule[day] = routineID }
+    }
+    
+    func removeRoutine(from day: String) {
+        withAnimation { userProfile?.weeklySchedule.removeValue(forKey: day) }
+    }
+    
+    func startWorkout(routine: Routine) {
+        let newSession = WorkoutSession(name: routine.name)
+        newSession.startTime = Date()
+        
+        var orderIndex = 0
+        for item in routine.items.sorted(by: { $0.orderIndex < $1.orderIndex }) {
+            guard let exercise = item.exercise else { continue }
+            for _ in item.templateSets {
+                let newSet = WorkoutSet(weight: 0, reps: 0, orderIndex: orderIndex)
+                newSet.exercise = exercise
+                newSet.workoutSession = newSession
+                newSet.routineItem = item
+                modelContext.insert(newSet)
+                orderIndex += 1
+            }
+        }
+        modelContext.insert(newSession)
+        dismiss()
+    }
+    
+    // MARK: - AI Logic (The Brain)
+    
+    func generateSmartSchedule() {
+        guard let profile = userProfile else { return }
+        isGenerating = true
+        
+        let existingNames = routines.map { $0.name }.joined(separator: ", ")
+        
+        let prompt = """
+        Act as an expert fitness coach.
+        USER PROFILE:
+        Goal: \(profile.fitnessGoal)
+        Experience: \(profile.experienceLevel)
+        Split Preference: \(profile.splitPreference)
+        EXISTING ROUTINES: [\(existingNames)]
+        TASK:
+        Create a 7-day weekly schedule (Monday to Sunday).
+        1. Use "Existing Routines" names exactly if they fit the goal.
+        2. If a necessary workout is missing (e.g. need 'Leg Day' but user doesn't have it), CREATE a new simple name for it.
+        3. Mark rest days as "Rest".
+        OUTPUT FORMAT (JSON ONLY):
+        {
+            "Monday": "Routine Name",
+            "Tuesday": "Rest",
+            ...
+        }
+        """
         
         Task {
             do {
-                // LOGIC: Check toggle before sending advice
-                let adviceToSend = profile.useCoachForSchedule ? cachedAdvice : ""
-                
-                let plan = try await manager.generateWeeklySchedule(
-                    profile: profile,
-                    history: history,
-                    coachAdvice: adviceToSend
-                )
+                let response = try await geminiManager.sendRequest(prompt: prompt)
+                let schedule = try parseAIResponse(response)
                 
                 await MainActor.run {
-                    self.currentPlan = plan
-                    self.isLoading = false
-                    if let data = try? JSONEncoder().encode(plan), let str = String(data: data, encoding: .utf8) {
-                        self.cachedJSON = str
-                    }
+                    applyAISchedule(schedule)
+                    isGenerating = false
                 }
             } catch {
-                await MainActor.run {
-                    self.errorMessage = error.localizedDescription
-                    self.isLoading = false
-                }
+                print("AI Error: \(error)")
+                await MainActor.run { isGenerating = false }
             }
         }
     }
     
-    func loadCachedPlan() {
-        if !cachedJSON.isEmpty, let data = cachedJSON.data(using: .utf8) {
-            if let decoded = try? JSONDecoder().decode(WeeklyPlan.self, from: data) {
-                self.currentPlan = decoded
+    func parseAIResponse(_ text: String) throws -> [String: String] {
+        guard let start = text.firstIndex(of: "{"),
+              let end = text.lastIndex(of: "}") else { return [:] }
+        let jsonStr = String(text[start...end])
+        guard let data = jsonStr.data(using: .utf8) else { return [:] }
+        return try JSONDecoder().decode([String: String].self, from: data)
+    }
+    
+    @MainActor
+    func applyAISchedule(_ schedule: [String: String]) {
+        for (day, routineName) in schedule {
+            if routineName.lowercased() == "rest" {
+                userProfile?.weeklySchedule.removeValue(forKey: day)
+                continue
+            }
+            
+            if let existing = routines.first(where: { $0.name.lowercased() == routineName.lowercased() }) {
+                userProfile?.weeklySchedule[day] = existing.id.uuidString
+            } else {
+                // Auto-Create missing routine
+                let newRoutine = Routine(name: routineName, note: "AI Generated")
+                modelContext.insert(newRoutine)
+                try? modelContext.save()
+                userProfile?.weeklySchedule[day] = newRoutine.id.uuidString
+                
+                print("✨ Auto-populating new routine: \(routineName)")
+                Task {
+                    do {
+                        let generatedContent = try await geminiManager.generateRoutineContent(name: routineName, profile: userProfile)
+                        
+                        await MainActor.run {
+                            var orderIndex = 0
+                            for genEx in generatedContent {
+                                
+                                // FIX: Use explicit local String variable for predicate
+                                let targetName: String = genEx.name
+                                
+                                let descriptor = FetchDescriptor<Exercise>(predicate: #Predicate { $0.name == targetName })
+                                let exercise: Exercise
+                                
+                                if let existingEx = try? modelContext.fetch(descriptor).first {
+                                    exercise = existingEx
+                                } else {
+                                    let newEx = Exercise(name: genEx.name)
+                                    modelContext.insert(newEx)
+                                    exercise = newEx
+                                }
+                                
+                                let newItem = RoutineItem(orderIndex: orderIndex, exercise: exercise, note: genEx.note)
+                                newItem.routine = newRoutine
+                                
+                                for i in 0..<genEx.sets {
+                                    let tmpl = RoutineSetTemplate(orderIndex: i, targetReps: genEx.reps)
+                                    newItem.templateSets.append(tmpl)
+                                }
+                                
+                                modelContext.insert(newItem)
+                                orderIndex += 1
+                            }
+                        }
+                    } catch {
+                        print("❌ Failed to populate \(routineName): \(error)")
+                    }
+                }
             }
         }
     }
 }
 
-// (Keep DayScheduleCard unchanged)
-struct DayScheduleCard: View {
-    let day: DaySchedule
-    var isRestDay: Bool { day.focus.lowercased().contains("rest") }
+// MARK: - Subviews
+
+struct DayRow: View {
+    let day: String
+    let assignedRoutine: Routine?
+    let onRemove: () -> Void
+    
     var body: some View {
-        HStack(spacing: 16) {
-            Text(day.day.prefix(3).uppercased())
-                .font(.caption).bold().foregroundStyle(.white)
-                .frame(width: 50, height: 50)
-                .background(isRestDay ? Color.gray.opacity(0.5) : Color.blue)
-                .clipShape(Circle())
-            VStack(alignment: .leading, spacing: 4) {
-                Text(day.focus).font(.headline).foregroundStyle(isRestDay ? .secondary : .primary)
+        HStack {
+            Text(day.prefix(3).uppercased())
+                .font(.caption).bold()
+                .foregroundStyle(.secondary)
+                .frame(width: 40)
+            
+            if let routine = assignedRoutine {
+                HStack {
+                    Image(systemName: "dumbbell.fill").foregroundStyle(.blue).font(.caption)
+                    Text(routine.name).font(.subheadline).fontWeight(.medium).lineLimit(1)
+                    Spacer()
+                    Button(action: onRemove) {
+                        Image(systemName: "xmark.circle.fill").foregroundStyle(.gray.opacity(0.4))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.vertical, 8)
+                .padding(.horizontal, 12)
+                .background(Color.blue.opacity(0.1))
+                .cornerRadius(8)
+            } else {
+                Text("Rest Day")
+                    .font(.subheadline).foregroundStyle(.tertiary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 12)
+                    .background(Color.gray.opacity(0.05))
+                    .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [4]))
+                            .foregroundStyle(.gray.opacity(0.2))
+                    )
             }
-            Spacer()
-            if isRestDay { Image(systemName: "moon.zzz.fill").foregroundStyle(.gray) }
-            else { Image(systemName: "chevron.right").foregroundStyle(.secondary).font(.caption) }
         }
-        .padding()
-        .background(Color(uiColor: .secondarySystemBackground))
-        .cornerRadius(12)
-        .opacity(isRestDay ? 0.8 : 1.0)
+        .padding(.vertical, 2)
+        .listRowSeparator(.hidden)
+    }
+}
+
+struct DraggableRoutineCard: View {
+    let routine: Routine
+    
+    var body: some View {
+        VStack(alignment: .leading) {
+            Text(routine.name)
+                .font(.subheadline).bold()
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+            Text("\(routine.items.count) Exercises")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        .padding(12)
+        .frame(width: 140, alignment: .leading)
+        .background(Color(uiColor: .systemBackground))
+        .cornerRadius(10)
+        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
     }
 }

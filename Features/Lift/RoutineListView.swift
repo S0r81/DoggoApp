@@ -13,6 +13,7 @@ struct RoutineListView: View {
     @State private var showCreateRoutine = false
     @State private var showCreateExercise = false
     @State private var showGenerator = false
+    @State private var showImportSheet = false // <--- NEW STATE
     
     var body: some View {
         NavigationStack {
@@ -36,13 +37,19 @@ struct RoutineListView: View {
             .navigationTitle("Lift")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    HStack {
-                        // 1. The New AI Generator Button
+                    HStack(spacing: 16) { // Added spacing for better touch targets
+                        
+                        // 1. NEW: Import Button
+                        Button(action: { showImportSheet = true }) {
+                            Image(systemName: "square.and.arrow.down")
+                        }
+                        
+                        // 2. The AI Generator Button
                         Button(action: { showGenerator = true }) {
                             Image(systemName: "wand.and.stars")
                         }
                         
-                        // 2. The Existing "Plus" Button
+                        // 3. The Existing "Plus" Button
                         Button(action: {
                             if selectedView == "Routines" {
                                 showCreateRoutine = true
@@ -64,8 +71,13 @@ struct RoutineListView: View {
                 ExerciseCreationView()
                     .presentationDetents([.medium])
             }
+            // Sheet for AI Generator
             .sheet(isPresented: $showGenerator) {
                 RoutineGeneratorView()
+            }
+            // NEW: Sheet for File Import
+            .sheet(isPresented: $showImportSheet) {
+                RoutineImportView()
             }
         }
     }
@@ -140,7 +152,6 @@ struct RoutineListContent: View {
     }
 }
 
-// MARK: - Subview: Exercise List (Read-Only Manager)
 // MARK: - Subview: Exercise List (Grouped Manager)
 struct ExerciseLibraryContent: View {
     @Environment(\.modelContext) private var modelContext

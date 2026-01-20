@@ -9,7 +9,7 @@ import SwiftUI
 import SwiftData
 
 struct HistoryView: View {
-    // Query only COMPLETED sessions, sorted with newest first
+    // Query only COMPLETED sessions
     @Query(
         filter: #Predicate<WorkoutSession> { $0.isCompleted == true },
         sort: \WorkoutSession.date,
@@ -17,6 +17,8 @@ struct HistoryView: View {
     ) var sessions: [WorkoutSession]
     
     @Environment(\.modelContext) private var modelContext
+    
+    @State private var showImportSheet = false
     
     var body: some View {
         NavigationStack {
@@ -30,12 +32,12 @@ struct HistoryView: View {
                                 VStack(alignment: .leading) {
                                     Text(session.name)
                                         .font(.headline)
+                                    // Shows Date AND Time now
                                     Text(session.date.formatted(date: .abbreviated, time: .shortened))
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
                                 Spacer()
-                                // Small summary pill
                                 Text("\(Int(session.duration / 60)) min")
                                     .font(.caption)
                                     .padding(.horizontal, 8)
@@ -49,25 +51,56 @@ struct HistoryView: View {
                 }
             }
             .navigationTitle("History")
-            // NEW: Add Button to Log Past Workout
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(action: { showImportSheet = true }) {
+                        Image(systemName: "square.and.arrow.down")
+                    }
+                }
+                
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(action: createManualEntry) {
                         Image(systemName: "plus")
                     }
                 }
             }
+            .sheet(isPresented: $showImportSheet) {
+                HistoryImportView()
+            }
+            // MARK: - AUTO-FIX (Silent Cleanup)
+            .task {
+                await performSilentCleanup()
+            }
         }
     }
     
-    // NEW: Function to create a blank history entry
+    // Deletes "Ghost" sessions automatically
+    private func performSilentCleanup() async {
+        do {
+            let descriptor = FetchDescriptor<WorkoutSession>(
+                predicate: #Predicate<WorkoutSession> { $0.isCompleted == false }
+            )
+            let activeSessions = try modelContext.fetch(descriptor)
+            
+            for session in activeSessions {
+                // If a session is incomplete AND older than 24 hours, it's a bug/ghost. Kill it.
+                // We use -86400 seconds (1 day) as the threshold.
+                if session.date < Date().addingTimeInterval(-86400) {
+                    modelContext.delete(session)
+                    print("👻 Silently deleted ghost session from: \(session.date)")
+                }
+            }
+        } catch {
+            print("Cleanup error: \(error)")
+        }
+    }
+    
     private func createManualEntry() {
         let newSession = WorkoutSession(name: "Manual Log")
         newSession.startTime = Date()
         newSession.date = Date()
-        newSession.isCompleted = true // Mark as history immediately
-        newSession.duration = 3600 // Default 60 mins
-        
+        newSession.isCompleted = true
+        newSession.duration = 3600
         modelContext.insert(newSession)
     }
     

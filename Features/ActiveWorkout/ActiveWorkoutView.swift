@@ -9,8 +9,18 @@ struct ActiveWorkoutView: View {
     @State private var showExerciseList = false
     @State private var collapsedExercises: Set<UUID> = []
     
-    // We only need this query if we plan to use it for the picker
-    @Query private var exercises: [Exercise]
+    // Helper Enum for Grouping
+    enum DisplayUnit: Identifiable {
+        case single(Exercise)
+        case superset([Exercise])
+        
+        var id: String {
+            switch self {
+            case .single(let e): return e.id.uuidString
+            case .superset(let es): return es.map { $0.id.uuidString }.joined()
+            }
+        }
+    }
     
     var body: some View {
         NavigationStack {
@@ -29,55 +39,28 @@ struct ActiveWorkoutView: View {
                 // 2. The Main List
                 if let session = viewModel.currentSession {
                     List {
-                        let activeExercises = getExercises(from: session)
+                        // Calculate Groups (Single vs Superset)
+                        let groups = getDisplayGroups(from: session)
                         
-                        ForEach(activeExercises, id: \.self) { exercise in
-                            Section {
-                                // ONLY SHOW SETS IF NOT COLLAPSED
-                                if !collapsedExercises.contains(exercise.id) {
-                                    let relevantSets = getSets(for: exercise, in: session)
-                                    
-                                    ForEach(relevantSets) { set in
-                                        let index = (relevantSets.firstIndex(of: set) ?? 0) + 1
-                                        
-                                        // Use the specific row based on type
-                                        if exercise.type == "Cardio" {
-                                            CardioSetRowView(set: set, index: index)
-                                                .listRowSeparator(.hidden)
-                                        } else {
-                                            SetRowView(set: set, index: index) {
-                                                // Trigger Rest Timer when checked
-                                                viewModel.startRestTimer()
-                                            }
-                                            .listRowSeparator(.hidden)
-                                        }
+                        ForEach(groups) { group in
+                            switch group {
+                            case .single(let exercise):
+                                // Render Standard Exercise
+                                renderExerciseSection(exercise, session: session)
+                                
+                            case .superset(let exercises):
+                                // Render Superset Container
+                                Section {
+                                    ForEach(exercises) { exercise in
+                                        renderExerciseSection(exercise, session: session, isSuperset: true)
                                     }
-                                    .onDelete { indexSet in
-                                        deleteSets(at: indexSet, from: relevantSets)
+                                } header: {
+                                    HStack {
+                                        Image(systemName: "flame.fill").foregroundStyle(.pink)
+                                        Text("SUPERSET").font(.headline).foregroundStyle(.pink)
                                     }
-                                    
-                                    // ADD SET BUTTON
-                                    Button {
-                                        HapticManager.shared.impact(style: .light)
-                                        viewModel.addSet(to: exercise, weight: 0, reps: 0)
-                                    } label: {
-                                        Label("Add Set", systemImage: "plus.circle.fill")
-                                            .font(.subheadline)
-                                            .foregroundStyle(.blue)
-                                            .frame(maxWidth: .infinity, alignment: .center)
-                                            .padding(.vertical, 4)
-                                    }
+                                    .padding(.top, 8)
                                 }
-                            } header: {
-                                // STICKY HEADER WITH REORDERING
-                                WorkoutSectionHeader(
-                                    exercise: exercise,
-                                    session: session,
-                                    isCollapsed: collapsedExercises.contains(exercise.id),
-                                    onToggleCollapse: { toggleCollapse(for: exercise) },
-                                    onMoveUp: { moveExercise(exercise, direction: -1) },
-                                    onMoveDown: { moveExercise(exercise, direction: 1) }
-                                )
                             }
                         }
                         
@@ -94,7 +77,6 @@ struct ActiveWorkoutView: View {
                         }
                     }
                     .listStyle(.insetGrouped)
-                    // SMOOTH ANIMATION
                     .animation(.default, value: collapsedExercises)
                 } else {
                     // Empty State
@@ -153,10 +135,122 @@ struct ActiveWorkoutView: View {
         }
     }
     
-    // MARK: - Helpers
+    // MARK: - Render Helpers
+    
+    @ViewBuilder
+    private func renderExerciseSection(_ exercise: Exercise, session: WorkoutSession, isSuperset: Bool = false) -> some View {
+        Section {
+            // ONLY SHOW SETS IF NOT COLLAPSED
+            if !collapsedExercises.contains(exercise.id) {
+                let relevantSets = getSets(for: exercise, in: session)
+                
+                ForEach(relevantSets) { set in
+                    let index = (relevantSets.firstIndex(of: set) ?? 0) + 1
+                    
+                    HStack(spacing: 0) {
+                        // VISUAL: Pink Line for Superset Items
+                        if isSuperset {
+                            Rectangle()
+                                .fill(Color.pink)
+                                .frame(width: 4)
+                                .padding(.trailing, 12)
+                        }
+                        
+                        // Use the specific row based on type
+                        if exercise.type == "Cardio" {
+                            CardioSetRowView(set: set, index: index)
+                        } else {
+                            SetRowView(set: set, index: index) {
+                                viewModel.startRestTimer()
+                            }
+                        }
+                    }
+                    .listRowSeparator(.hidden)
+                }
+                .onDelete { indexSet in
+                    let relevantSets = getSets(for: exercise, in: session)
+                    for index in indexSet {
+                        viewModel.deleteSet(relevantSets[index])
+                    }
+                }
+                
+                // ADD SET BUTTON
+                Button {
+                    HapticManager.shared.impact(style: .light)
+                    viewModel.addSet(to: exercise, weight: 0, reps: 0)
+                } label: {
+                    HStack {
+                        if isSuperset {
+                            Color.clear.frame(width: 16) // Indent to match sets
+                        }
+                        Label("Add Set", systemImage: "plus.circle.fill")
+                            .font(.subheadline)
+                            .foregroundStyle(.blue)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.vertical, 4)
+                    }
+                }
+            }
+        } header: {
+            WorkoutSectionHeader(
+                exercise: exercise,
+                session: session,
+                isCollapsed: collapsedExercises.contains(exercise.id),
+                onToggleCollapse: { toggleCollapse(for: exercise) },
+                onMoveUp: { moveExercise(exercise, direction: -1) },
+                onMoveDown: { moveExercise(exercise, direction: 1) }
+            )
+        }
+    }
+    
+    // MARK: - Logic Helpers
+    
+    private func getDisplayGroups(from session: WorkoutSession) -> [DisplayUnit] {
+        let sortedSets = session.sets.sorted { $0.orderIndex < $1.orderIndex }
+        
+        // Extract unique exercises in order
+        var uniqueExercises: [Exercise] = []
+        for set in sortedSets {
+            if let ex = set.exercise, !uniqueExercises.contains(ex) {
+                uniqueExercises.append(ex)
+            }
+        }
+        
+        var groups: [DisplayUnit] = []
+        var i = 0
+        
+        while i < uniqueExercises.count {
+            let currentEx = uniqueExercises[i]
+            
+            // Find Superset ID via the first set's routineItem
+            let currentSet = session.sets.first(where: { $0.exercise == currentEx })
+            let currentSupersetID = currentSet?.routineItem?.supersetID
+            
+            if let id = currentSupersetID {
+                // Look ahead for others with same ID
+                var supersetBuffer: [Exercise] = [currentEx]
+                var j = i + 1
+                while j < uniqueExercises.count {
+                    let nextEx = uniqueExercises[j]
+                    let nextSet = session.sets.first(where: { $0.exercise == nextEx })
+                    if nextSet?.routineItem?.supersetID == id {
+                        supersetBuffer.append(nextEx)
+                        j += 1
+                    } else {
+                        break
+                    }
+                }
+                groups.append(.superset(supersetBuffer))
+                i = j
+            } else {
+                groups.append(.single(currentEx))
+                i += 1
+            }
+        }
+        return groups
+    }
     
     private func getExercises(from session: WorkoutSession) -> [Exercise] {
-        // We trust the sets orderIndex to keep exercises sorted
         let sortedSets = session.sets.sorted { $0.orderIndex < $1.orderIndex }
         var unique: [Exercise] = []
         for set in sortedSets {
@@ -185,39 +279,22 @@ struct ActiveWorkoutView: View {
         }
     }
     
-    private func deleteSets(at offsets: IndexSet, from sets: [WorkoutSet]) {
-        for index in offsets {
-            let setToDelete = sets[index]
-            viewModel.deleteSet(setToDelete)
-        }
-    }
-    
     // MARK: - REORDER LOGIC
     private func moveExercise(_ exercise: Exercise, direction: Int) {
         guard let session = viewModel.currentSession else { return }
         
-        // 1. Get Current Order
         var currentOrder = getExercises(from: session)
-        
-        // 2. Find indices
         guard let currentIndex = currentOrder.firstIndex(of: exercise) else { return }
         let newIndex = currentIndex + direction
-        
-        // 3. Safety Check
         guard newIndex >= 0 && newIndex < currentOrder.count else { return }
         
-        // 4. Perform the swap
         withAnimation {
             currentOrder.swapAt(currentIndex, newIndex)
             
-            // 5. Update Database Order
-            // We re-assign 'orderIndex' for ALL sets based on the new exercise order
+            // Re-assign global orderIndex
             var globalSetIndex = 0
-            
             for ex in currentOrder {
-                // Get sets for this exercise, maintain their internal order
                 let setsForExercise = getSets(for: ex, in: session)
-                
                 for set in setsForExercise {
                     set.orderIndex = globalSetIndex
                     globalSetIndex += 1
@@ -252,7 +329,7 @@ struct WorkoutHeaderView: View {
                 onFinish()
             }
             .buttonStyle(.borderedProminent)
-            .tint(.green) // Green implies "Done/Save"
+            .tint(.green)
             .fontWeight(.bold)
         }
         .padding()
@@ -272,11 +349,9 @@ struct WorkoutSectionHeader: View {
     let isCollapsed: Bool
     let onToggleCollapse: () -> Void
     
-    // Reorder callbacks
     let onMoveUp: () -> Void
     let onMoveDown: () -> Void
     
-    // Helper to find the AI Note
     private var aiNote: String? {
         session.sets
             .first(where: { $0.exercise == exercise && $0.routineItem?.note != nil })?

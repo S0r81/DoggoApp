@@ -15,6 +15,11 @@
 		1523B0782F17D0D700A76B87 /* UserProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1523B0772F17D0D300A76B87 /* UserProfile.swift */; };
 		1523B07B2F17D11500A76B87 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1523B07A2F17D10600A76B87 /* OnboardingView.swift */; };
 		1523B07E2F17D45700A76B87 /* ProfileSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1523B07D2F17D45100A76B87 /* ProfileSettingsView.swift */; };
+		153050C82F1EBF3E00D6FDA8 /* DocumentPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 153050C72F1EBF3800D6FDA8 /* DocumentPicker.swift */; };
+		153050CA2F1EBF5600D6FDA8 /* TextExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 153050C92F1EBF5100D6FDA8 /* TextExtractor.swift */; };
+		153050CF2F1EC32000D6FDA8 /* RoutineImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 153050CE2F1EC31E00D6FDA8 /* RoutineImportView.swift */; };
+		153050D12F1F060900D6FDA8 /* CSVImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 153050D02F1F060600D6FDA8 /* CSVImporter.swift */; };
+		153050D32F1F062E00D6FDA8 /* HistoryImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 153050D22F1F062D00D6FDA8 /* HistoryImportView.swift */; };
 		155E6CB62F0F362F00698DE1 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 155E6CB52F0F362F00698DE1 /* WidgetKit.framework */; };
 		155E6CB82F0F362F00698DE1 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 155E6CB72F0F362F00698DE1 /* SwiftUI.framework */; };
 		155E6CC92F0F363100698DE1 /* DoggoWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 155E6CB32F0F362F00698DE1 /* DoggoWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -103,6 +108,11 @@
 		1523B0772F17D0D300A76B87 /* UserProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfile.swift; sourceTree = "<group>"; };
 		1523B07A2F17D10600A76B87 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		1523B07D2F17D45100A76B87 /* ProfileSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileSettingsView.swift; sourceTree = "<group>"; };
+		153050C72F1EBF3800D6FDA8 /* DocumentPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentPicker.swift; sourceTree = "<group>"; };
+		153050C92F1EBF5100D6FDA8 /* TextExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextExtractor.swift; sourceTree = "<group>"; };
+		153050CE2F1EC31E00D6FDA8 /* RoutineImportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutineImportView.swift; sourceTree = "<group>"; };
+		153050D02F1F060600D6FDA8 /* CSVImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CSVImporter.swift; sourceTree = "<group>"; };
+		153050D22F1F062D00D6FDA8 /* HistoryImportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryImportView.swift; sourceTree = "<group>"; };
 		155E6CB32F0F362F00698DE1 /* DoggoWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = DoggoWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		155E6CB52F0F362F00698DE1 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		155E6CB72F0F362F00698DE1 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
@@ -339,6 +349,7 @@
 		15E5BFC42F0C2990006A00E4 /* History */ = {
 			isa = PBXGroup;
 			children = (
+				153050D22F1F062D00D6FDA8 /* HistoryImportView.swift */,
 				1561DE802F1AD3F70018DBDB /* ExerciseAnalyticsView.swift */,
 				15E5BFC22F0C2990006A00E4 /* HistoryView.swift */,
 				15E5BFC32F0C2990006A00E4 /* WorkoutDetailView.swift */,
@@ -397,6 +408,7 @@
 		15E5BFF02F0C49F2006A00E4 /* Lift */ = {
 			isa = PBXGroup;
 			children = (
+				153050CE2F1EC31E00D6FDA8 /* RoutineImportView.swift */,
 				1523B0732F16D31F00A76B87 /* RoutineGeneratorView.swift */,
 				15E5BFFB2F0C5B22006A00E4 /* CardioSetRowView.swift */,
 				15E5BFF92F0C5A07006A00E4 /* ExerciseDetailView.swift */,
@@ -409,6 +421,9 @@
 		15E5C03E2F0D8D6E006A00E4 /* Utilities */ = {
 			isa = PBXGroup;
 			children = (
+				153050D02F1F060600D6FDA8 /* CSVImporter.swift */,
+				153050C92F1EBF5100D6FDA8 /* TextExtractor.swift */,
+				153050C72F1EBF3800D6FDA8 /* DocumentPicker.swift */,
 				1523B06F2F16BBA100A76B87 /* GeminiManager.swift */,
 				1523B06D2F167C8000A76B87 /* DataExporter.swift */,
 				15E5C0412F0D96C6006A00E4 /* DataSeeder.swift */,
@@ -597,11 +612,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				15E5BFFE2F0C5C51006A00E4 /* View+Theme.swift in Sources */,
+				153050D32F1F062E00D6FDA8 /* HistoryImportView.swift in Sources */,
 				15E5BFAB2F0C2980006A00E4 /* DoggoApp.swift in Sources */,
 				1561DE832F1AE6EA0018DBDB /* WeeklyPlannerView.swift in Sources */,
 				15E5BFF62F0C5296006A00E4 /* RoutineItem.swift in Sources */,
 				15E5BFCE2F0C2990006A00E4 /* ExerciseListView.swift in Sources */,
 				15E5BFFA2F0C5A0E006A00E4 /* ExerciseDetailView.swift in Sources */,
+				153050D12F1F060900D6FDA8 /* CSVImporter.swift in Sources */,
 				15E5BFF82F0C54CA006A00E4 /* RoutineSetTemplate.swift in Sources */,
 				15E5C0422F0D96CA006A00E4 /* DataSeeder.swift in Sources */,
 				15E5BFCF2F0C2990006A00E4 /* RestTimerView.swift in Sources */,
@@ -610,6 +627,7 @@
 				15E5BFD22F0C2990006A00E4 /* WorkoutSet.swift in Sources */,
 				15E5BFD32F0C2990006A00E4 /* Exercise.swift in Sources */,
 				15E5BFD42F0C2990006A00E4 /* SetRowView.swift in Sources */,
+				153050C82F1EBF3E00D6FDA8 /* DocumentPicker.swift in Sources */,
 				1561DE812F1AD3F90018DBDB /* ExerciseAnalyticsView.swift in Sources */,
 				1523B0742F16D32400A76B87 /* RoutineGeneratorView.swift in Sources */,
 				1523B0782F17D0D700A76B87 /* UserProfile.swift in Sources */,
@@ -631,9 +649,11 @@
 				15E5BFDC2F0C2990006A00E4 /* WorkoutSession.swift in Sources */,
 				1523B06E2F167C8500A76B87 /* DataExporter.swift in Sources */,
 				15E5BFDD2F0C2990006A00E4 /* CardStyle.swift in Sources */,
+				153050CF2F1EC32000D6FDA8 /* RoutineImportView.swift in Sources */,
 				1523B07E2F17D45700A76B87 /* ProfileSettingsView.swift in Sources */,
 				15E5BFDE2F0C2990006A00E4 /* ActiveWorkoutView.swift in Sources */,
 				155E6CD02F0F376900698DE1 /* DoggoActivityAttributes.swift in Sources */,
+				153050CA2F1EBF5600D6FDA8 /* TextExtractor.swift in Sources */,
 				15E5BFDF2F0C2990006A00E4 /* ActiveWorkoutViewModel.swift in Sources */,
 				15E5BFE02F0C2990006A00E4 /* DashboardView.swift in Sources */,
 				1523B0702F16BBA800A76B87 /* GeminiManager.swift in Sources */,
@@ -694,7 +714,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.guavi.Doggo.DoggoWidget;
+				PRODUCT_BUNDLE_IDENTIFIER = com.guavi.DoggoApp.2026.DoggoWidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -724,7 +744,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.guavi.Doggo.DoggoWidget;
+				PRODUCT_BUNDLE_IDENTIFIER = com.guavi.DoggoApp.2026.DoggoWidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -865,6 +885,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 825JPA884M;
@@ -881,8 +902,9 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.guavi.Doggo;
+				PRODUCT_BUNDLE_IDENTIFIER = com.guavi.DoggoApp.2026;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -899,6 +921,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 825JPA884M;
@@ -915,8 +938,9 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.guavi.Doggo;
+				PRODUCT_BUNDLE_IDENTIFIER = com.guavi.DoggoApp.2026;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;

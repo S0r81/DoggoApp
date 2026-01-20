@@ -22,8 +22,7 @@ class ActiveWorkoutViewModel {
     var restSecondsRemaining = 0
     var isRestTimerActive = false
     
-    // NEW: The "Source of Truth" for sync
-    // We store exactly when the timer should finish.
+    // Source of Truth for sync
     var restTimerEndTime: Date?
     
     let fallbackRestTime = 90
@@ -64,6 +63,7 @@ class ActiveWorkoutViewModel {
         let savedUnit = UserDefaults.standard.string(forKey: "unitSystem")
         let isMetric = (savedUnit == "metric")
         
+        // 1. Create Sets (Clean Slate - No Auto-Fill)
         for item in sortedItems {
             if let exercise = item.exercise {
                 let sortedTemplates = item.templateSets.sorted { $0.orderIndex < $1.orderIndex }
@@ -77,13 +77,11 @@ class ActiveWorkoutViewModel {
                 
                 if sortedTemplates.isEmpty {
                     globalOrderIndex += 1
+                    // Weight starts at 0. User uses Magic Wand or inputs manually.
                     let set = WorkoutSet(weight: 0, reps: 0, orderIndex: globalOrderIndex, unit: unitForThisExercise)
                     set.exercise = exercise
                     set.workoutSession = newSession
-                    
-                    // FIX: Link the set to the plan so we can see the Notes
-                    set.routineItem = item
-                    
+                    set.routineItem = item // Link for notes
                     context.insert(set)
                 } else {
                     for template in sortedTemplates {
@@ -91,15 +89,13 @@ class ActiveWorkoutViewModel {
                         let realSet = WorkoutSet(weight: 0, reps: template.targetReps, orderIndex: globalOrderIndex, unit: unitForThisExercise)
                         realSet.exercise = exercise
                         realSet.workoutSession = newSession
-                        
-                        // FIX: Link the set to the plan so we can see the Notes
-                        realSet.routineItem = item
-                        
+                        realSet.routineItem = item // Link for notes
                         context.insert(realSet)
                     }
                 }
             }
         }
+        
         self.currentSession = newSession
         self.startTimer()
     }
@@ -122,12 +118,20 @@ class ActiveWorkoutViewModel {
             unitToUse = isMetric ? "kg" : "lbs"
         }
         
-        let newSet = WorkoutSet(weight: weight, reps: reps, orderIndex: nextIndex, unit: unitToUse)
+        // Auto-fill weight for new set if possible (ONLY for manually added sets in active session)
+        var weightToUse = weight
+        if weight == 0 {
+            // Try to copy from previous set in this session
+            if let lastSet = session.sets.filter({ $0.exercise == exercise }).last {
+                weightToUse = lastSet.weight
+            }
+        }
+        
+        let newSet = WorkoutSet(weight: weightToUse, reps: reps, orderIndex: nextIndex, unit: unitToUse)
         newSet.exercise = exercise
         newSet.workoutSession = session
         
-        // Note: For manually added sets (freestyle), there is no 'routineItem' to link to,
-        // so we leave it nil. This is correct behavior.
+        // No routineItem link for freestyle sets
         
         context.insert(newSet)
     }
@@ -149,7 +153,6 @@ class ActiveWorkoutViewModel {
     
     private func resumeSession(_ session: WorkoutSession) {
         self.currentSession = session
-        // Calculate gap immediately based on Dates
         if let start = session.startTime {
             self.elapsedSeconds = Int(Date().timeIntervalSince(start))
         }
@@ -163,7 +166,6 @@ class ActiveWorkoutViewModel {
         
         isTimerRunning = true
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            // Logic: Compare NOW with START. This creates a self-correcting timer.
             let diff = Date().timeIntervalSince(start)
             self?.elapsedSeconds = Int(diff)
         }
@@ -176,7 +178,7 @@ class ActiveWorkoutViewModel {
         elapsedSeconds = 0
     }
     
-    // MARK: - Rest Timer Logic (Sync Fix)
+    // MARK: - Rest Timer Logic
     
     func startRestTimer() {
         cancelRestTimer()
@@ -184,21 +186,16 @@ class ActiveWorkoutViewModel {
         let savedSeconds = UserDefaults.standard.integer(forKey: "defaultRestSeconds")
         let duration = (savedSeconds == 0) ? fallbackRestTime : savedSeconds
         
-        // 1. Set the Source of Truth (Future Date)
         let finishDate = Date().addingTimeInterval(Double(duration))
         self.restTimerEndTime = finishDate
         
-        // 2. Update immediate UI
         self.restSecondsRemaining = duration
         self.isRestTimerActive = true
         
-        // 3. Start In-App Loop (Checks Date instead of just decrementing)
-        // We check every 0.1s to make the UI feel snappy
         restTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             self?.updateRestTimer()
         }
         
-        // 4. Start Live Activity
         if ActivityAuthorizationInfo().areActivitiesEnabled {
             let attributes = DoggoActivityAttributes()
             let contentState = DoggoActivityAttributes.ContentState(endTime: finishDate)
@@ -214,17 +211,13 @@ class ActiveWorkoutViewModel {
         }
     }
     
-    // NEW: Helper to sync the timer
     private func updateRestTimer() {
         guard let endTime = restTimerEndTime else { return }
         let remaining = endTime.timeIntervalSince(Date())
         
         if remaining > 0 {
-            // Update UI with actual remaining time
-            // We add 1 so that 29.9 seconds shows as "30" rather than "29"
             self.restSecondsRemaining = Int(remaining) + 1
         } else {
-            // Timer Finished
             cancelRestTimer()
             HapticManager.shared.notification(type: .success)
         }
@@ -237,9 +230,7 @@ class ActiveWorkoutViewModel {
         restSecondsRemaining = 0
         restTimerEndTime = nil
         
-        // End Live Activity
         if let activity = currentActivity {
-            // Updated for iOS 16.2 deprecation
             let finalState = DoggoActivityAttributes.ContentState(endTime: Date())
             let finalContent = ActivityContent(state: finalState, staleDate: nil)
             
@@ -251,15 +242,12 @@ class ActiveWorkoutViewModel {
     }
     
     func addRestTime(_ seconds: Int) {
-        // 1. Update the Source of Truth
         guard let oldEndTime = restTimerEndTime else { return }
         let newEndTime = oldEndTime.addingTimeInterval(Double(seconds))
         self.restTimerEndTime = newEndTime
         
-        // 2. Force immediate UI update
         updateRestTimer()
         
-        // 3. Update Live Activity
         if let activity = currentActivity {
             let updatedState = DoggoActivityAttributes.ContentState(endTime: newEndTime)
             Task {

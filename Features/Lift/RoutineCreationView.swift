@@ -1,9 +1,10 @@
 //
-//  Untitled.swift
+//  RoutineCreationView.swift
 //  Doggo
 //
 //  Created by Sorest on 1/5/26.
 //
+
 import SwiftUI
 import SwiftData
 
@@ -13,58 +14,85 @@ struct RoutineCreationView: View {
     
     var routineToEdit: Routine?
     
-    @State private var name = ""
-    @State private var routineItems: [RoutineItem] = [] // We work with Item objects now, not just Exercises
+    // NEW: Needed for AI context and matching
+    @Query var allExercises: [Exercise]
+    @Query var profiles: [UserProfile]
     
+    @State private var name = ""
+    @State private var routineItems: [RoutineItem] = []
+    
+    // UI State
     @State private var showExercisePicker = false
-    @State private var itemToConfigure: RoutineItem? // Tracks which exercise we are editing sets for
+    @State private var itemToConfigure: RoutineItem?
+    
+    // MARK: - AI State
+    @State private var isGenerating = false
+    @State private var aiError: String?
+    private let geminiManager = GeminiManager()
+    
+    // MARK: - Superset State
+    @State private var isSelectionMode = false
+    @State private var selectedItems = Set<RoutineItem>()
     
     var body: some View {
         NavigationStack {
             List {
+                // MARK: - Section 1: Name & AI
                 Section(header: Text("Routine Details")) {
-                    TextField("Routine Name", text: $name)
+                    HStack {
+                        TextField("Routine Name (e.g. Leg Day)", text: $name)
+                        
+                        // MAGIC WAND BUTTON
+                        if isGenerating {
+                            ProgressView()
+                                .padding(.leading, 8)
+                        } else if !name.isEmpty {
+                            Button(action: autofillWithAI) {
+                                Image(systemName: "wand.and.stars")
+                                    .foregroundStyle(.purple)
+                                    .font(.title3)
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.leading, 8)
+                        }
+                    }
                 }
                 
-                Section(header: Text("Exercises")) {
+                // MARK: - Section 2: Exercises
+                Section(header: headerWithActions) {
                     if routineItems.isEmpty {
-                        Text("No exercises added")
-                            .foregroundStyle(.secondary)
+                        VStack(spacing: 8) {
+                            Text("No exercises added")
+                                .foregroundStyle(.secondary)
+                            
+                            if name.isEmpty {
+                                Text("Enter a name to use AI Auto-Fill")
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                        .padding(.vertical)
+                        .frame(maxWidth: .infinity)
                     } else {
                         ForEach(routineItems) { item in
-                            HStack {
-                                Image(systemName: "line.3.horizontal")
-                                    .foregroundStyle(.gray)
-                                
-                                VStack(alignment: .leading) {
-                                    Text(item.exercise?.name ?? "Unknown")
-                                        .font(.headline)
-                                    Text("\(item.templateSets.count) sets")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                                
-                                Spacer()
-                                
-                                // Configure Button (Gear Icon)
-                                Button(action: {
-                                    itemToConfigure = item
-                                }) {
-                                    Image(systemName: "gearshape.fill")
-                                        .foregroundStyle(.blue)
-                                        .padding(8)
-                                        .background(Color.blue.opacity(0.1))
-                                        .clipShape(Circle())
-                                }
-                                .buttonStyle(.plain)
-                            }
+                            // FIX: Updated argument label to 'toggleAction'
+                            RoutineItemRow(
+                                item: item,
+                                isSelectionMode: isSelectionMode,
+                                isSelected: selectedItems.contains(item),
+                                toggleAction: { toggleSelection(for: item) },
+                                configureAction: { itemToConfigure = item }
+                            )
                         }
                         .onMove(perform: moveItem)
                         .onDelete(perform: deleteItem)
                     }
                     
-                    Button(action: { showExercisePicker = true }) {
-                        Label("Add Exercise", systemImage: "plus")
+                    if !isSelectionMode {
+                        Button(action: { showExercisePicker = true }) {
+                            Label("Add Exercise", systemImage: "plus")
+                        }
+                        .disabled(isGenerating)
                     }
                 }
             }
@@ -73,84 +101,218 @@ struct RoutineCreationView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
+                
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { saveRoutine() }
-                        .disabled(name.isEmpty || routineItems.isEmpty)
+                        .disabled(name.isEmpty || routineItems.isEmpty || isGenerating)
                 }
+                
+                // Select Button
                 ToolbarItem(placement: .topBarLeading) {
-                    EditButton()
+                    Button(isSelectionMode ? "Done" : "Select") {
+                        withAnimation {
+                            isSelectionMode.toggle()
+                            selectedItems.removeAll()
+                        }
+                    }
+                    .disabled(routineItems.isEmpty || isGenerating)
+                }
+                
+                // Edit Button (Standard)
+                if !isSelectionMode && !routineItems.isEmpty {
+                    ToolbarItem(placement: .topBarLeading) {
+                        EditButton()
+                    }
                 }
             }
             .onAppear {
                 if let routine = routineToEdit {
                     name = routine.name
-                    // Load existing items
                     routineItems = routine.items.sorted { $0.orderIndex < $1.orderIndex }
                 }
             }
             .sheet(isPresented: $showExercisePicker) {
                 ExerciseSelectionSheet(onSelect: addExercise)
             }
-            // THE CONFIGURATION SHEET
             .sheet(item: $itemToConfigure) { item in
                 SetConfigurationView(item: item)
                     .presentationDetents([.medium, .large])
             }
+            // Error Alert
+            .alert("AI Error", isPresented: Binding(get: { aiError != nil }, set: { _ in aiError = nil })) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(aiError ?? "Unknown error")
+            }
         }
     }
     
-    // MARK: - Logic
+    // MARK: - AI Logic
+    
+    private func autofillWithAI() {
+        guard name.count >= 3 else {
+            aiError = "Please enter a descriptive routine name first (e.g. 'Back and Biceps')."
+            return
+        }
+        
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        isGenerating = true
+        
+        Task {
+            do {
+                let generatedExercises = try await geminiManager.generateRoutineContent(name: name, profile: profiles.first)
+                
+                await MainActor.run {
+                    for genEx in generatedExercises {
+                        // 1. Find or Create Exercise
+                        let exercise: Exercise
+                        if let existing = allExercises.first(where: { $0.name.lowercased() == genEx.name.lowercased() }) {
+                            exercise = existing
+                        } else {
+                            let newEx = Exercise(name: genEx.name)
+                            modelContext.insert(newEx)
+                            exercise = newEx
+                        }
+                        
+                        // 2. Create Routine Item
+                        let newItem = RoutineItem(orderIndex: routineItems.count, exercise: exercise, note: genEx.note)
+                        
+                        // 3. Add Sets
+                        for i in 0..<genEx.sets {
+                            let tmplSet = RoutineSetTemplate(orderIndex: i, targetReps: genEx.reps)
+                            newItem.templateSets.append(tmplSet)
+                        }
+                        
+                        routineItems.append(newItem)
+                    }
+                    isGenerating = false
+                }
+            } catch {
+                await MainActor.run {
+                    aiError = "Could not generate routine. Please check your internet or try a different name."
+                    isGenerating = false
+                }
+            }
+        }
+    }
+    
+    // MARK: - Superset & Standard Logic
+    
+    var headerWithActions: some View {
+        HStack {
+            Text("Exercises")
+            Spacer()
+            
+            if isSelectionMode && selectedItems.count > 1 {
+                Button("Link Superset") { linkSelectedItems() }
+                    .font(.caption).bold().foregroundStyle(.pink)
+            }
+            
+            if isSelectionMode && selectedItems.count == 1,
+               let item = selectedItems.first,
+               item.supersetID != nil {
+                Button("Unlink") { unlinkItem(item) }
+                    .font(.caption).bold().foregroundStyle(.red)
+            }
+        }
+    }
+    
+    private func toggleSelection(for item: RoutineItem) {
+        if selectedItems.contains(item) { selectedItems.remove(item) } else { selectedItems.insert(item) }
+    }
+    
+    private func linkSelectedItems() {
+        let newID = UUID()
+        let sortedSelection = routineItems.filter { selectedItems.contains($0) }
+        withAnimation {
+            for item in sortedSelection { item.supersetID = newID }
+            isSelectionMode = false; selectedItems.removeAll()
+        }
+    }
+    
+    private func unlinkItem(_ item: RoutineItem) {
+        withAnimation {
+            item.supersetID = nil
+            isSelectionMode = false; selectedItems.removeAll()
+        }
+    }
     
     private func addExercise(_ exercise: Exercise) {
-        // Create a new item wrapper
         let newItem = RoutineItem(orderIndex: routineItems.count, exercise: exercise)
-        
-        // Default: Add 3 sets of 10 reps automatically so it's not empty
         for i in 0..<3 {
             let set = RoutineSetTemplate(orderIndex: i, targetReps: 10)
             newItem.templateSets.append(set)
         }
-        
         routineItems.append(newItem)
     }
     
     private func moveItem(from source: IndexSet, to destination: Int) {
         routineItems.move(fromOffsets: source, toOffset: destination)
-        // Update indices
-        for (index, item) in routineItems.enumerated() {
-            item.orderIndex = index
-        }
+        for (index, item) in routineItems.enumerated() { item.orderIndex = index }
     }
     
-    private func deleteItem(at offsets: IndexSet) {
-        routineItems.remove(atOffsets: offsets)
-    }
+    private func deleteItem(at offsets: IndexSet) { routineItems.remove(atOffsets: offsets) }
     
     private func saveRoutine() {
         let routine = routineToEdit ?? Routine(name: name)
         routine.name = name
         
-        if routineToEdit == nil {
-            modelContext.insert(routine)
-        }
-        
-        // Clear old relations if editing (simplest way to ensure order)
+        if routineToEdit == nil { modelContext.insert(routine) }
         routine.items = []
-        
-        // Save new items
         for (index, item) in routineItems.enumerated() {
             item.orderIndex = index
-            item.routine = routine // Link parent
-            routine.items.append(item) // Link child
-            
-            // Note: Since 'item' is a class created in this View state,
-            // we need to make sure it's inserted into the context
+            item.routine = routine
+            routine.items.append(item)
             modelContext.insert(item)
         }
-        
         dismiss()
     }
 }
+
+// MARK: - Subview: Routine Item Row
+struct RoutineItemRow: View {
+    let item: RoutineItem
+    let isSelectionMode: Bool
+    let isSelected: Bool
+    let toggleAction: () -> Void
+    let configureAction: () -> Void
+    
+    var body: some View {
+        HStack {
+            if isSelectionMode {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(isSelected ? .blue : .gray)
+                    .onTapGesture { toggleAction() }
+            }
+            if item.supersetID != nil {
+                Capsule().fill(Color.pink).frame(width: 4).padding(.vertical, 2)
+            }
+            if !isSelectionMode {
+                Image(systemName: "line.3.horizontal").foregroundStyle(.gray)
+            }
+            VStack(alignment: .leading) {
+                Text(item.exercise?.name ?? "Unknown").font(.headline)
+                HStack {
+                    Text("\(item.templateSets.count) sets")
+                    if item.supersetID != nil {
+                        Text("• Superset").foregroundStyle(.pink).fontWeight(.bold)
+                    }
+                }
+                .font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            if !isSelectionMode {
+                Button(action: configureAction) {
+                    Image(systemName: "gearshape.fill")
+                        .foregroundStyle(.blue).padding(8)
+                        .background(Color.blue.opacity(0.1)).clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+}
+
 // MARK: - Subview: Set Configuration Sheet
 struct SetConfigurationView: View {
     @Environment(\.dismiss) var dismiss
@@ -161,16 +323,12 @@ struct SetConfigurationView: View {
             List {
                 Section(header: Text("Sets & Reps")) {
                     if item.templateSets.isEmpty {
-                        Text("No sets configured.")
-                            .foregroundStyle(.secondary)
+                        Text("No sets configured.").foregroundStyle(.secondary)
                     } else {
-                        // We sort the sets to keep them in order (Set 1, Set 2...)
                         ForEach(item.templateSets.sorted(by: { $0.orderIndex < $1.orderIndex })) { set in
-                            // Call the helper view here
                             SetRowConfig(set: set)
                         }
                         .onDelete { indexSet in
-                            // We have to find the correct set object to delete since the list is sorted
                             let sortedSets = item.templateSets.sorted(by: { $0.orderIndex < $1.orderIndex })
                             for index in indexSet {
                                 let setToRemove = sortedSets[index]
@@ -181,65 +339,53 @@ struct SetConfigurationView: View {
                             reindexSets()
                         }
                     }
-                    
                     Button("Add Set") {
                         withAnimation {
                             let nextIndex = item.templateSets.count
-                            // Default to matching the previous set's reps, or 10
                             let reps = item.templateSets.last?.targetReps ?? 10
                             let newSet = RoutineSetTemplate(orderIndex: nextIndex, targetReps: reps)
                             item.templateSets.append(newSet)
                         }
                     }
                 }
+                if let note = item.note, !note.isEmpty {
+                    Section(header: Text("Coach's Note")) {
+                        Text(note).foregroundStyle(.secondary)
+                    }
+                }
             }
             .navigationTitle(item.exercise?.name ?? "Configure")
-            .toolbar {
-                Button("Done") { dismiss() }
-            }
+            .toolbar { Button("Done") { dismiss() } }
         }
     }
     
     private func reindexSets() {
-        // Re-assign indexes (0, 1, 2...) after deletion so gaps don't appear
         let sortedSets = item.templateSets.sorted(by: { $0.orderIndex < $1.orderIndex })
-        for (index, set) in sortedSets.enumerated() {
-            set.orderIndex = index
-        }
+        for (index, set) in sortedSets.enumerated() { set.orderIndex = index }
     }
 }
 
 // MARK: - Helper Row for Binding
 struct SetRowConfig: View {
     @Bindable var set: RoutineSetTemplate
-    
     var body: some View {
         HStack {
-            Text("Set \(set.orderIndex + 1)")
-                .foregroundStyle(.secondary)
-                .frame(width: 50, alignment: .leading)
-            
+            Text("Set \(set.orderIndex + 1)").foregroundStyle(.secondary).frame(width: 50, alignment: .leading)
             Spacer()
-            
-            // Now '$set' works because we are in a dedicated view with @Bindable
-            Stepper("\(set.targetReps) Reps", value: $set.targetReps, in: 1...100)
-                .fixedSize()
+            Stepper("\(set.targetReps) Reps", value: $set.targetReps, in: 1...100).fixedSize()
         }
     }
 }
 
-// Helper: Selection Sheet (Modified to return single exercise)
+// Helper: Selection Sheet
 struct ExerciseSelectionSheet: View {
     @Environment(\.dismiss) var dismiss
     @Query(sort: \Exercise.name) var allExercises: [Exercise]
     var onSelect: (Exercise) -> Void
-    
     @State private var searchText = ""
     
     var groupedExercises: [String: [Exercise]] {
-        let filtered = allExercises.filter {
-            searchText.isEmpty || $0.name.localizedCaseInsensitiveContains(searchText)
-        }
+        let filtered = allExercises.filter { searchText.isEmpty || $0.name.localizedCaseInsensitiveContains(searchText) }
         return Dictionary(grouping: filtered, by: { $0.muscleGroup })
     }
     
@@ -251,16 +397,11 @@ struct ExerciseSelectionSheet: View {
                 ForEach(muscleGroups, id: \.self) { group in
                     Section(header: Text(group)) {
                         ForEach(groupedExercises[group] ?? []) { exercise in
-                            Button(action: {
-                                onSelect(exercise)
-                                dismiss()
-                            }) {
+                            Button(action: { onSelect(exercise); dismiss() }) {
                                 HStack {
                                     Text(exercise.name).foregroundStyle(.primary)
                                     Spacer()
-                                    if exercise.type == "Cardio" {
-                                        Image(systemName: "figure.run").foregroundStyle(.blue)
-                                    }
+                                    if exercise.type == "Cardio" { Image(systemName: "figure.run").foregroundStyle(.blue) }
                                 }
                             }
                         }

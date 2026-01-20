@@ -69,6 +69,10 @@ class UserProfile {
     
     var useMetric: Bool = false
     
+    // NEW: The Weekly Schedule
+    // Key: Day Name (e.g. "Monday"), Value: Routine UUID string
+    var weeklySchedule: [String: String] = [:]
+    
     init(name: String, age: Int, heightCM: Double, weightKG: Double, activityLevel: String, fitnessGoal: String, experienceLevel: String, splitPreference: String = "Flexible / AI Decides") {
         self.name = name
         self.age = age
@@ -82,6 +86,7 @@ class UserProfile {
         // Defaults
         self.useCoachForSchedule = true
         self.useCoachForRoutine = true
+        self.weeklySchedule = [:]
     }
     
     var preferredSplit: WorkoutSplit {
